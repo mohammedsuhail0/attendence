@@ -1,0 +1,202 @@
+/* ========== RESET & BASE ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #13131a;
+  --surface-2: #1c1c28;
+  --border: #2a2a3d;
+  --text: #e8e8ed;
+  --text-dim: #8888a0;
+  --primary: #6c5ce7;
+  --primary-hover: #7c6ef7;
+  --danger: #e74c3c;
+  --success: #2ecc71;
+  --warning: #f39c12;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', 'Fira Code', monospace;
+}
+
+html { font-size: 16px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ========== TYPOGRAPHY ========== */
+h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+
+/* ========== LAYOUT ========== */
+.page { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+.page-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 2rem; padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.page-header .user-info { font-size: 0.85rem; color: var(--text-dim); }
+
+/* ========== CARD ========== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--primary); }
+.card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.75rem;
+}
+.card-header h3 { margin: 0; }
+.card-meta { font-size: 0.8rem; color: var(--text-dim); }
+
+/* ========== BUTTONS ========== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 0.5rem; padding: 0.625rem 1.25rem;
+  font-size: 0.875rem; font-weight: 500;
+  border: none; border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.2s;
+  text-decoration: none;
+}
+.btn:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--primary); color: white;
+}
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
+.btn-danger {
+  background: var(--danger); color: white;
+}
+.btn-danger:hover:not(:disabled) { opacity: 0.9; }
+.btn-outline {
+  background: transparent; color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.btn-outline:hover:not(:disabled) { border-color: var(--text); color: var(--text); }
+.btn-sm { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
+.btn-block { width: 100%; }
+
+/* ========== FORMS ========== */
+.form-group { margin-bottom: 1rem; }
+.form-group label {
+  display: block; font-size: 0.85rem; font-weight: 500;
+  margin-bottom: 0.375rem; color: var(--text-dim);
+}
+.form-input, .form-select {
+  width: 100%; padding: 0.625rem 0.875rem;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 0.9rem; font-family: var(--font);
+  transition: border-color 0.2s;
+}
+.form-input:focus, .form-select:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+}
+
+/* ========== TOKEN DISPLAY ========== */
+.token-display {
+  text-align: center; padding: 2rem;
+  background: var(--surface-2); border-radius: var(--radius);
+  margin: 1rem 0;
+}
+.token-code {
+  font-family: var(--mono); font-size: 3.5rem; font-weight: 800;
+  letter-spacing: 0.35em; color: var(--primary);
+  margin: 0.5rem 0;
+}
+.token-timer {
+  font-size: 1.1rem; font-weight: 600;
+}
+.token-timer.expired { color: var(--danger); }
+.token-timer.active { color: var(--success); }
+
+/* ========== STATUS BADGES ========== */
+.badge {
+  display: inline-block; padding: 0.2rem 0.6rem;
+  font-size: 0.72rem; font-weight: 600;
+  border-radius: 999px; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.badge-present { background: rgba(46,204,113,0.15); color: var(--success); }
+.badge-absent { background: rgba(231,76,60,0.15); color: var(--danger); }
+.badge-active { background: rgba(108,92,231,0.15); color: var(--primary); }
+.badge-closed { background: rgba(136,136,160,0.15); color: var(--text-dim); }
+
+/* ========== TABLE ========== */
+.table-wrapper { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: 0.875rem;
+}
+th {
+  text-align: left; padding: 0.75rem;
+  font-weight: 600; font-size: 0.75rem;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-dim); border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 0.75rem; border-bottom: 1px solid var(--border);
+}
+tr:last-child td { border-bottom: none; }
+
+/* ========== ALERT ========== */
+.alert {
+  padding: 0.75rem 1rem; border-radius: var(--radius-sm);
+  font-size: 0.85rem; margin-bottom: 1rem;
+}
+.alert-error {
+  background: rgba(231,76,60,0.1); color: var(--danger);
+  border: 1px solid rgba(231,76,60,0.2);
+}
+.alert-success {
+  background: rgba(46,204,113,0.1); color: var(--success);
+  border: 1px solid rgba(46,204,113,0.2);
+}
+
+/* ========== LOGIN PAGE ========== */
+.login-wrapper {
+  min-height: 100vh; display: flex;
+  align-items: center; justify-content: center;
+}
+.login-card {
+  width: 100%; max-width: 400px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 2rem;
+}
+.login-card h1 { text-align: center; margin-bottom: 0.5rem; }
+.login-card .subtitle {
+  text-align: center; color: var(--text-dim);
+  font-size: 0.85rem; margin-bottom: 1.5rem;
+}
+
+/* ========== GRID ========== */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 600px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  .token-code { font-size: 2.5rem; }
+}
+
+/* ========== UTILITIES ========== */
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.text-center { text-align: center; }
+.text-dim { color: var(--text-dim); }
+.text-sm { font-size: 0.85rem; }
+.flex { display: flex; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.gap-1 { gap: 0.5rem; }
+.gap-2 { gap: 1rem; }
