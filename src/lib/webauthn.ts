@@ -33,17 +33,30 @@ function getRequestOrigin(request?: Request): string | null {
   return `${protocol}://${host}`;
 }
 
+function isLocalhostHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost');
+}
+
 export function getWebAuthnConfig(request?: Request): {
   rpID: string;
   rpName: string;
   origin: string;
 } {
   const configuredOrigin = process.env.WEBAUTHN_ORIGIN || process.env.NEXT_PUBLIC_APP_ORIGIN;
-  const fallbackOrigin = getRequestOrigin(request) || 'http://localhost:3000';
-  const originString = configuredOrigin || fallbackOrigin;
+  const requestOrigin = getRequestOrigin(request);
+
+  // Prefer the actual request origin because WebAuthn validation must match
+  // the browser's origin exactly. This keeps localhost, tunnels, and public
+  // HTTPS deployments aligned with the page the user actually opened.
+  const originString = requestOrigin || configuredOrigin || 'http://localhost:3000';
 
   const originURL = new URL(originString);
-  const rpID = process.env.WEBAUTHN_RP_ID || originURL.hostname;
+  const requestHostname = requestOrigin ? new URL(requestOrigin).hostname : null;
+  const configuredRpID = process.env.WEBAUTHN_RP_ID;
+  const rpID =
+    requestHostname && !isLocalhostHostname(requestHostname) && configuredRpID && isLocalhostHostname(configuredRpID)
+      ? requestHostname
+      : configuredRpID || originURL.hostname;
   const rpName = process.env.WEBAUTHN_RP_NAME || 'Smart Attendance';
 
   return {

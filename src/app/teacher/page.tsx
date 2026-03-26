@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { Class, AttendanceSession } from '@/types/database';
+import { getDateStringInTimeZone } from '@/lib/utils';
 
 export default function TeacherDashboard() {
   const supabase = createClient();
@@ -12,13 +13,11 @@ export default function TeacherDashboard() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [profile, setProfile] = useState<{ full_name: string } | null>(null);
+  const [today, setToday] = useState(() => getDateStringInTimeZone());
 
   // Form state
   const [selectedClass, setSelectedClass] = useState('');
   const [period, setPeriod] = useState(1);
-  const [sessionDate, setSessionDate] = useState(
-    new Date().toISOString().split('T')[0]
-  );
 
   // Active session state
   const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
@@ -32,6 +31,17 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const syncToday = () => {
+      setToday(getDateStringInTimeZone());
+    };
+
+    syncToday();
+    const interval = setInterval(syncToday, 60_000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch profile, classes, sessions
   useEffect(() => {
@@ -104,7 +114,7 @@ export default function TeacherDashboard() {
       body: JSON.stringify({
         class_id: selectedClass,
         period,
-        session_date: sessionDate,
+        session_date: today,
       }),
     });
 
@@ -267,7 +277,7 @@ export default function TeacherDashboard() {
                   value={period}
                   onChange={(e) => setPeriod(Number(e.target.value))}
                 >
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((p) => (
+                  {[1, 2, 3, 4, 5, 6].map((p) => (
                     <option key={p} value={p}>Period {p}</option>
                   ))}
                 </select>
@@ -278,10 +288,12 @@ export default function TeacherDashboard() {
                   id="session-date"
                   type="date"
                   className="form-input"
-                  value={sessionDate}
-                  onChange={(e) => setSessionDate(e.target.value)}
+                  value={today}
+                  readOnly
+                  aria-readonly="true"
                   required
                 />
+                <p className="text-dim text-sm mt-1">Locked to today.</p>
               </div>
             </div>
 

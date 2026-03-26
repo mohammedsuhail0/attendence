@@ -13,7 +13,7 @@ Token-based attendance system for college classes with teacher and student dashb
 
 - Teacher login and dashboard
 - Create attendance session by `department + section + subject + period + date`
-- 15-second live token generation and refresh
+- 25-second live token generation and refresh
 - Student token submit flow
 - One attendance mark per student per session
 - Auto-absent marking when session closes
@@ -31,6 +31,14 @@ SUPABASE_SERVICE_ROLE_KEY=
 WEBAUTHN_RP_NAME=SmartAttendance
 WEBAUTHN_RP_ID=localhost
 WEBAUTHN_ORIGIN=http://localhost:3000
+```
+
+For mobile passkeys and biometrics in production, move these to your live HTTPS
+domain, for example:
+
+```bash
+WEBAUTHN_RP_ID=attendance.example.com
+WEBAUTHN_ORIGIN=https://attendance.example.com
 ```
 
 ## Setup
@@ -51,6 +59,10 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+For Android and iPhone biometric testing, use Safari on iOS or Chrome on
+Android over HTTPS. A temporary tunnel can work for testing, but a stable public
+domain is the reliable production path.
+
 ## Validate
 
 ```bash
@@ -67,4 +79,3 @@ Extracted class dataset files are available one level up in project:
 - `../it_students_extracted.json`
 
 You can map this into `profiles` + `enrollments` for final demo import.
-

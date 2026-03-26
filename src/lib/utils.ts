@@ -24,9 +24,9 @@ export function rateLimit(key: string): { allowed: boolean; remaining: number } 
 export function generateToken(): string {
   const chars = 'ABCDEF0123456789';
   let token = '';
-  const bytes = new Uint8Array(6);
+  const bytes = new Uint8Array(4);
   crypto.getRandomValues(bytes);
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     token += chars[bytes[i] % chars.length];
   }
   return token;
@@ -36,4 +36,27 @@ export function isTokenExpired(expiresAt: string): boolean {
   return new Date(expiresAt).getTime() <= Date.now();
 }
 
-export const TOKEN_VALIDITY_SECONDS = 15;
+export function getDateStringInTimeZone(
+  date: Date = new Date(),
+  timeZone: string = 'Asia/Kolkata'
+): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  const parts = formatter.formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  if (!year || !month || !day) {
+    throw new Error('Failed to format date in time zone');
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
+export const TOKEN_VALIDITY_SECONDS = 25;

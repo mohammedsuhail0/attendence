@@ -2,14 +2,12 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,28 +26,38 @@ export default function LoginPage() {
       return;
     }
 
-    // Get role and redirect
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     if (!user) {
       setError('Login failed');
       setLoading(false);
       return;
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    router.push(profile?.role === 'teacher' ? '/teacher' : '/student');
-    router.refresh();
+    if (profileError) {
+      setError(profileError.message);
+      setLoading(false);
+      return;
+    }
+
+    const destination = profile?.role === 'teacher' ? '/teacher' : '/student';
+
+    // A full navigation is more reliable immediately after auth changes.
+    window.location.assign(destination);
   }
 
   return (
     <div className="login-wrapper">
       <div className="login-card">
-        <h1>📋 Smart Attendance</h1>
+        <h1>Smart Attendance</h1>
         <p className="subtitle">Sign in to continue</p>
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -74,7 +82,7 @@ export default function LoginPage() {
               id="password"
               type="password"
               className="form-input"
-              placeholder="••••••••"
+              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

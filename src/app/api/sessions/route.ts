@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { CreateSessionSchema } from '@/lib/schemas/session';
-import { generateToken, TOKEN_VALIDITY_SECONDS } from '@/lib/utils';
+import {
+  generateToken,
+  getDateStringInTimeZone,
+  TOKEN_VALIDITY_SECONDS,
+} from '@/lib/utils';
 
 export async function POST(request: Request) {
   try {
@@ -13,16 +17,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Role check
+    // Load profile so we can keep the teacher-only intent, but do not rely on
+    // a stale role value alone. Class ownership is the stronger authorization
+    // check further below.
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
-
-    if (profile?.role !== 'teacher') {
-      return NextResponse.json({ error: 'Only teachers can create sessions' }, { status: 403 });
-    }
 
     // Validate input
     const body = await request.json();
@@ -35,6 +37,14 @@ export async function POST(request: Request) {
     }
 
     const { class_id, period, session_date } = parsed.data;
+    const today = getDateStringInTimeZone();
+
+    if (session_date !== today) {
+      return NextResponse.json(
+        { error: 'Sessions can only be created for today' },
+        { status: 400 }
+      );
+    }
 
     // Check if teacher owns this class
     const { data: cls } = await supabase
@@ -46,6 +56,11 @@ export async function POST(request: Request) {
 
     if (!cls) {
       return NextResponse.json({ error: 'Class not found or not yours' }, { status: 404 });
+    }
+
+    const normalizedRole = profile?.role?.trim().toLowerCase();
+    if (normalizedRole && normalizedRole !== 'teacher') {
+      return NextResponse.json({ error: 'Only teachers can create sessions' }, { status: 403 });
     }
 
     // Check for duplicate session (same class, period, date)

@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const SubmitAttendanceSchema = z.object({
   token: z
     .string()
-    .length(6, 'Token must be 6 characters')
+    .length(4, 'Token must be 4 characters')
     .toUpperCase(),
   assertion: z.unknown(),
 });

@@ -85,8 +85,15 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ message: 'Biometric registered' });
-  } catch {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    console.error('WebAuthn register verify failed:', error);
+    return NextResponse.json(
+      {
+        error:
+          process.env.NODE_ENV === 'production' ? 'Internal server error' : message,
+      },
+      { status: 500 }
+    );
   }
 }
-

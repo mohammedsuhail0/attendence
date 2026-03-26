@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   browserSupportsWebAuthn,
+  platformAuthenticatorIsAvailable,
   startAuthentication,
   startRegistration,
 } from '@simplewebauthn/browser';
@@ -46,6 +47,7 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
+  const [biometricReady, setBiometricReady] = useState<boolean | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
 
   useEffect(() => {
@@ -69,6 +71,41 @@ export default function StudentDashboard() {
     load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkBiometricSupport() {
+      const secureContext = window.isSecureContext;
+      const webAuthnSupported = browserSupportsWebAuthn();
+      const platformSupported =
+        secureContext && webAuthnSupported
+          ? await platformAuthenticatorIsAvailable()
+          : false;
+
+      if (!cancelled) {
+        setBiometricReady(secureContext && webAuthnSupported && platformSupported);
+      }
+    }
+
+    checkBiometricSupport();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function requireBiometricSupport() {
+    if (biometricReady === null) {
+      throw new Error('Checking biometric support. Please try again in a moment.');
+    }
+
+    if (!biometricReady) {
+      throw new Error(
+        'This phone or browser cannot complete biometrics on this origin. Use HTTPS in Safari or Chrome with device biometrics enabled.'
+      );
+    }
+  }
+
   async function registerBiometric() {
     setError('');
     setSuccess('');
@@ -78,6 +115,7 @@ export default function StudentDashboard() {
       if (!browserSupportsWebAuthn()) {
         throw new Error('This browser does not support phone biometrics.');
       }
+      requireBiometricSupport();
 
       const optionsRes = await fetch('/api/webauthn/register/options', {
         method: 'POST',
@@ -114,6 +152,7 @@ export default function StudentDashboard() {
     if (!browserSupportsWebAuthn()) {
       throw new Error('This browser does not support phone biometrics.');
     }
+    requireBiometricSupport();
 
     const optionsRes = await fetch('/api/webauthn/authenticate/options', {
       method: 'POST',
@@ -214,11 +253,17 @@ export default function StudentDashboard() {
             <p className="text-dim text-sm mt-1">
               Set up fingerprint or face unlock once before marking attendance.
             </p>
+            {biometricReady === false && (
+              <p className="text-dim text-sm mt-1">
+                Open this app in Safari on iPhone or Chrome on Android over HTTPS, with
+                device biometrics or screen lock enabled.
+              </p>
+            )}
             <button
               type="button"
               className="btn btn-outline mt-1"
               onClick={registerBiometric}
-              disabled={biometricBusy}
+              disabled={biometricBusy || biometricReady !== true}
             >
               {biometricBusy ? 'Setting up...' : 'Set Up Biometrics'}
             </button>
@@ -230,15 +275,15 @@ export default function StudentDashboard() {
         <h2>Mark Attendance</h2>
         <form onSubmit={submitAttendance} className="mt-2">
           <div className="form-group">
-            <label htmlFor="token-input">Enter Token (from teacher)</label>
+            <label htmlFor="token-input">Enter 4-digit token (from teacher)</label>
             <input
               id="token-input"
               type="text"
               className="form-input"
-              placeholder="e.g. A3F2B9"
+              placeholder="e.g. A3F2"
               value={token}
-              onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 6))}
-              maxLength={6}
+              onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))}
+              maxLength={4}
               style={{
                 fontFamily: 'var(--mono)',
                 fontSize: '1.5rem',
@@ -251,7 +296,7 @@ export default function StudentDashboard() {
           <button
             type="submit"
             className="btn btn-primary btn-block"
-            disabled={loading || token.length !== 6 || !hasBiometric}
+            disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
           >
             {loading ? 'Submitting...' : 'Verify Biometrics & Submit'}
           </button>
@@ -363,4 +408,3 @@ export default function StudentDashboard() {
     </div>
   );
 }
-
