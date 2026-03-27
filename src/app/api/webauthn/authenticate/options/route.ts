@@ -40,7 +40,7 @@ export async function POST(request: Request) {
           transports: credential.transports,
         },
       ],
-      userVerification: 'preferred',
+      userVerification: 'required',
     });
 
     const admin = createAdminClient();

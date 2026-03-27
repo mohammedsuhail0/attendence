@@ -38,8 +38,8 @@ export async function POST(request: Request) {
       userDisplayName: profile.full_name || profile.email || 'Student',
       attestationType: 'none',
       authenticatorSelection: {
-        residentKey: 'preferred',
-        userVerification: 'preferred',
+        residentKey: 'required',
+        userVerification: 'required',
         authenticatorAttachment: 'platform',
       },
     });

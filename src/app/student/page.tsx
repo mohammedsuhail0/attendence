@@ -251,12 +251,12 @@ export default function StudentDashboard() {
         ) : (
           <>
             <p className="text-dim text-sm mt-1">
-              Set up fingerprint or face unlock once before marking attendance.
+              Set up fingerprint or Face ID once before marking attendance.
             </p>
             {biometricReady === false && (
               <p className="text-dim text-sm mt-1">
                 Open this app in Safari on iPhone or Chrome on Android over HTTPS, with
-                device biometrics or screen lock enabled.
+                fingerprint or Face ID enabled.
               </p>
             )}
             <button
