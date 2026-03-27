@@ -15,11 +15,11 @@ export default function TeacherDashboard() {
   const [profile, setProfile] = useState<{ full_name: string } | null>(null);
   const [today, setToday] = useState(() => getDateStringInTimeZone());
 
-  // Form state
-  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [period, setPeriod] = useState(1);
 
-  // Active session state
   const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
   const [token, setToken] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
@@ -43,10 +43,11 @@ export default function TeacherDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch profile, classes, sessions
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: p } = await supabase
@@ -64,29 +65,55 @@ export default function TeacherDashboard() {
       const d2 = await res2.json();
       if (d2.sessions) setSessions(d2.sessions);
     }
+
     load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Countdown timer
   const startTimer = useCallback((expiresAt: string) => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     const update = () => {
-      const diff = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      const diff = Math.max(
+        0,
+        Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)
+      );
       setTimeLeft(diff);
       if (diff <= 0 && timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
+
     update();
     timerRef.current = setInterval(update, 1000);
   }, []);
 
-  useEffect(() => () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    },
+    []
+  );
 
-  // Poll attendance list for active session
+  const departments = Array.from(new Set(classes.map((cls) => cls.department)));
+  const years = Array.from(
+    new Set(
+      classes
+        .filter((cls) => cls.department === selectedDepartment)
+        .map((cls) => cls.section)
+    )
+  );
+  const subjects = Array.from(
+    new Set(
+      classes
+        .filter(
+          (cls) =>
+            cls.department === selectedDepartment &&
+            cls.section === selectedYear
+        )
+        .map((cls) => cls.subject)
+    )
+  );
+
   useEffect(() => {
     if (!activeSession || activeSession.status === 'closed') return;
 
@@ -101,18 +128,30 @@ export default function TeacherDashboard() {
     return () => clearInterval(interval);
   }, [activeSession]);
 
-  // Create session
   async function createSession(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setSuccess('');
     setLoading(true);
 
+    const selectedClass = classes.find(
+      (cls) =>
+        cls.department === selectedDepartment &&
+        cls.section === selectedYear &&
+        cls.subject === selectedSubject
+    );
+
+    if (!selectedClass) {
+      setLoading(false);
+      setError('Please choose department, year, and subject.');
+      return;
+    }
+
     const res = await fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        class_id: selectedClass,
+        class_id: selectedClass.id,
         period,
         session_date: today,
       }),
@@ -132,7 +171,6 @@ export default function TeacherDashboard() {
     setSuccess('Session created! Share the token with students.');
   }
 
-  // Refresh token
   async function refreshToken() {
     if (!activeSession) return;
     const res = await fetch(`/api/sessions/${activeSession.id}/refresh`, {
@@ -145,7 +183,6 @@ export default function TeacherDashboard() {
     }
   }
 
-  // Close session
   async function closeSession() {
     if (!activeSession) return;
     const res = await fetch(`/api/sessions/${activeSession.id}/close`, {
@@ -157,14 +194,12 @@ export default function TeacherDashboard() {
       setToken('');
       setTimeLeft(0);
       setSuccess(`Session closed. Present: ${data.present}, Absent: ${data.absent}`);
-      // Refresh sessions list
       const res2 = await fetch('/api/sessions');
       const d2 = await res2.json();
       if (d2.sessions) setSessions(d2.sessions);
     }
   }
 
-  // Logout
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/login');
@@ -173,7 +208,6 @@ export default function TeacherDashboard() {
 
   return (
     <div className="page">
-      {/* Header */}
       <div className="page-header">
         <div>
           <h1>Teacher Dashboard</h1>
@@ -187,11 +221,10 @@ export default function TeacherDashboard() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
-      {/* Active Session */}
       {activeSession && (
         <div className="card" style={{ borderColor: 'var(--primary)' }}>
           <div className="card-header">
-            <h2>🟢 Active Session</h2>
+            <h2>Active Session</h2>
             <span className="badge badge-active">LIVE</span>
           </div>
 
@@ -199,23 +232,25 @@ export default function TeacherDashboard() {
             <p className="text-dim text-sm">Share this token with students</p>
             <div className="token-code">{token}</div>
             <p className={`token-timer ${timeLeft > 0 ? 'active' : 'expired'}`}>
-              {timeLeft > 0 ? `⏱ ${timeLeft}s remaining` : '⚠ Token expired'}
+              {timeLeft > 0 ? `${timeLeft}s remaining` : 'Token expired'}
             </p>
           </div>
 
           <div className="flex-between mt-2">
             <button className="btn btn-primary btn-sm" onClick={refreshToken}>
-              🔄 New Token
+              New Token
             </button>
             <button className="btn btn-danger btn-sm" onClick={closeSession}>
-              ✖ Close Session
+              Close Session
             </button>
           </div>
 
-          {/* Live Attendance */}
           {attendanceList.length > 0 && (
             <div className="mt-3">
-              <h3>Attendance ({attendanceList.filter(a => a.status === 'present').length} present)</h3>
+              <h3>
+                Attendance (
+                {attendanceList.filter((record) => record.status === 'present').length} present)
+              </h3>
               <div className="table-wrapper mt-1">
                 <table>
                   <thead>
@@ -226,13 +261,13 @@ export default function TeacherDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {attendanceList.map((r, i) => (
-                      <tr key={i}>
-                        <td>{r.profiles?.roll_number || '—'}</td>
-                        <td>{r.profiles?.full_name || '—'}</td>
+                    {attendanceList.map((record, index) => (
+                      <tr key={index}>
+                        <td>{record.profiles?.roll_number || '-'}</td>
+                        <td>{record.profiles?.full_name || '-'}</td>
                         <td>
-                          <span className={`badge badge-${r.status}`}>
-                            {r.status}
+                          <span className={`badge badge-${record.status}`}>
+                            {record.status}
                           </span>
                         </td>
                       </tr>
@@ -245,27 +280,73 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* Create Session Form */}
       {!activeSession && (
         <div className="card">
           <h2>Start New Session</h2>
           <form onSubmit={createSession} className="mt-2">
             <div className="form-group">
-              <label htmlFor="class-select">Class</label>
+              <label htmlFor="department-select">Department</label>
               <select
-                id="class-select"
+                id="department-select"
                 className="form-select"
-                value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                value={selectedDepartment}
+                onChange={(e) => {
+                  setSelectedDepartment(e.target.value);
+                  setSelectedYear('');
+                  setSelectedSubject('');
+                }}
                 required
               >
-                <option value="">Select a class...</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.department} — {c.section} — {c.subject}
+                <option value="">Select department...</option>
+                {departments.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="grid-2">
+              <div className="form-group">
+                <label htmlFor="year-select">Year</label>
+                <select
+                  id="year-select"
+                  className="form-select"
+                  value={selectedYear}
+                  onChange={(e) => {
+                    setSelectedYear(e.target.value);
+                    setSelectedSubject('');
+                  }}
+                  disabled={!selectedDepartment}
+                  required
+                >
+                  <option value="">Select year...</option>
+                  {years.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="subject-select">Subject</label>
+                <select
+                  id="subject-select"
+                  className="form-select"
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  disabled={!selectedYear}
+                  required
+                >
+                  <option value="">Select subject...</option>
+                  {subjects.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid-2">
@@ -277,8 +358,10 @@ export default function TeacherDashboard() {
                   value={period}
                   onChange={(e) => setPeriod(Number(e.target.value))}
                 >
-                  {[1, 2, 3, 4, 5, 6].map((p) => (
-                    <option key={p} value={p}>Period {p}</option>
+                  {[1, 2, 3, 4, 5, 6].map((slot) => (
+                    <option key={slot} value={slot}>
+                      Period {slot}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -300,7 +383,12 @@ export default function TeacherDashboard() {
             <button
               type="submit"
               className="btn btn-primary btn-block"
-              disabled={loading || !selectedClass}
+              disabled={
+                loading ||
+                !selectedDepartment ||
+                !selectedYear ||
+                !selectedSubject
+              }
             >
               {loading ? 'Creating...' : 'Start Session & Generate Token'}
             </button>
@@ -308,7 +396,6 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* Session History */}
       <div className="card mt-3">
         <h2>Session History</h2>
         {sessions.length === 0 ? (
@@ -325,14 +412,14 @@ export default function TeacherDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.session_date}</td>
-                    <td>{s.classes?.subject || '—'}</td>
-                    <td>P{s.period}</td>
+                {sessions.map((session) => (
+                  <tr key={session.id}>
+                    <td>{session.session_date}</td>
+                    <td>{session.classes?.subject || '-'}</td>
+                    <td>P{session.period}</td>
                     <td>
-                      <span className={`badge badge-${s.status}`}>
-                        {s.status}
+                      <span className={`badge badge-${session.status}`}>
+                        {session.status}
                       </span>
                     </td>
                   </tr>
