@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation';
 import type { Class, AttendanceSession } from '@/types/database';
 import { getDateStringInTimeZone } from '@/lib/utils';
 
+const DEPARTMENT_OPTIONS = ['IT', 'CSE', 'AIDS', 'Civil', 'Mech'] as const;
+const YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
+
+function getClassYear(cls: Class) {
+  // Keep old demo data working while section values are moved from A/B labels to year numbers.
+  return cls.section === 'A' ? '1' : cls.section;
+}
+
 export default function TeacherDashboard() {
   const supabase = createClient();
   const router = useRouter();
@@ -94,25 +102,19 @@ export default function TeacherDashboard() {
     []
   );
 
-  const departments = Array.from(new Set(classes.map((cls) => cls.department)));
-  const years = Array.from(
-    new Set(
-      classes
-        .filter((cls) => cls.department === selectedDepartment)
-        .map((cls) => cls.section)
-    )
-  );
+  const departments = [...DEPARTMENT_OPTIONS];
+  const years = [...YEAR_OPTIONS];
   const subjects = Array.from(
     new Set(
       classes
         .filter(
           (cls) =>
             cls.department === selectedDepartment &&
-            cls.section === selectedYear
+            getClassYear(cls) === selectedYear
         )
         .map((cls) => cls.subject)
     )
-  );
+  ).sort((left, right) => left.localeCompare(right));
 
   useEffect(() => {
     if (!activeSession || activeSession.status === 'closed') return;
@@ -137,7 +139,7 @@ export default function TeacherDashboard() {
     const selectedClass = classes.find(
       (cls) =>
         cls.department === selectedDepartment &&
-        cls.section === selectedYear &&
+        getClassYear(cls) === selectedYear &&
         cls.subject === selectedSubject
     );
 

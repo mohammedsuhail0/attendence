@@ -37,8 +37,10 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Unauthenticated users: redirect to login (except login page and API)
-  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/api')) {
+  const isPublicPath = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/api');
+
+  // Unauthenticated users: redirect to login for protected routes only.
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
