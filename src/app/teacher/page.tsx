@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { Class, AttendanceSession } from '@/types/database';
@@ -55,6 +55,8 @@ export default function TeacherDashboard() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [viewingHistoryParams, setViewingHistoryParams] = useState<{ id: string; fetching: boolean } | null>(null);
+  const [historyAttendanceList, setHistoryAttendanceList] = useState<AttendanceRow[]>([]);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -323,6 +325,21 @@ export default function TeacherDashboard() {
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
+  }
+
+  async function viewSessionHistory(sessionId: string) {
+    if (viewingHistoryParams?.id === sessionId) {
+      setViewingHistoryParams(null);
+      return;
+    }
+    setViewingHistoryParams({ id: sessionId, fetching: true });
+    setHistoryAttendanceList([]);
+    const res = await fetch(`/api/sessions/${sessionId}/attendance`);
+    const data = await res.json();
+    if (data.records) {
+      setHistoryAttendanceList(data.records);
+    }
+    setViewingHistoryParams({ id: sessionId, fetching: false });
   }
 
   return (
@@ -647,24 +664,68 @@ export default function TeacherDashboard() {
               </thead>
               <tbody>
                 {sessions.map((session) => (
-                  <tr key={session.id}>
-                    <td>{session.session_date}</td>
-                    <td>{session.classes?.subject || '-'}</td>
-                    <td>P{session.period}</td>
-                    <td>
-                      <span className={`badge badge-${session.status}`}>
-                        {session.status}
-                      </span>
-                    </td>
-                    <td>
-                      {session.attendance_summary
-                        ? `${session.attendance_summary.present}/${session.attendance_summary.absent}`
-                        : '-'}
-                    </td>
-                    <td>{session.attendance_summary?.biometric ?? '-'}</td>
-                    <td>{session.attendance_summary?.manual_override ?? '-'}</td>
-                    <td>{session.attendance_summary?.auto_absent ?? '-'}</td>
-                  </tr>
+                  <React.Fragment key={session.id}>
+                    <tr 
+                      onClick={() => viewSessionHistory(session.id)}
+                      style={{ cursor: 'pointer' }}
+                      title="Click to view detailed attendance list"
+                    >
+                      <td>{session.session_date}</td>
+                      <td>{session.classes?.subject || '-'}</td>
+                      <td>P{session.period}</td>
+                      <td>
+                        <span className={`badge badge-${session.status}`}>
+                          {session.status}
+                        </span>
+                      </td>
+                      <td>
+                        {session.attendance_summary
+                          ? `${session.attendance_summary.present}/${session.attendance_summary.absent}`
+                          : '-'}
+                      </td>
+                      <td>{session.attendance_summary?.biometric ?? '-'}</td>
+                      <td>{session.attendance_summary?.manual_override ?? '-'}</td>
+                      <td>{session.attendance_summary?.auto_absent ?? '-'}</td>
+                    </tr>
+                    {viewingHistoryParams?.id === session.id && (
+                      <tr>
+                        <td colSpan={8} style={{ padding: '0', backgroundColor: 'var(--bg-accent, #fafafa)' }}>
+                          <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                            {viewingHistoryParams.fetching ? (
+                              <p className="text-dim text-sm text-center my-2">Loading attendance list...</p>
+                            ) : historyAttendanceList.length === 0 ? (
+                              <p className="text-dim text-sm text-center my-2">No attendance records found.</p>
+                            ) : (
+                              <div className="table-wrapper" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                <table style={{ fontSize: '0.85rem', margin: 0, border: '1px solid var(--border)' }}>
+                                  <thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'var(--bg)' }}>
+                                    <tr>
+                                      <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Roll No</th>
+                                      <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Name</th>
+                                      <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Status</th>
+                                      <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Mode</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {historyAttendanceList.map((record, index) => (
+                                      <tr key={index}>
+                                        <td style={{ padding: '0.5rem' }}>{record.profiles?.roll_number || '-'}</td>
+                                        <td style={{ padding: '0.5rem' }}>{record.profiles?.full_name || '-'}</td>
+                                        <td style={{ padding: '0.5rem' }}>
+                                          <span className={`badge badge-${record.status}`}>{record.status}</span>
+                                        </td>
+                                        <td style={{ padding: '0.5rem' }}>{record.mark_mode || 'biometric'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
