@@ -153,27 +153,7 @@ export default function TeacherDashboard() {
     );
   });
 
-  const modeTotals = sessions.reduce(
-    (acc, session) => {
-      const summary = session.attendance_summary;
-      if (!summary) return acc;
-      acc.total += summary.total;
-      acc.biometric += summary.biometric;
-      acc.manual += summary.manual_override;
-      acc.auto += summary.auto_absent;
-      return acc;
-    },
-    { total: 0, biometric: 0, manual: 0, auto: 0 }
-  );
 
-  const modePercentages =
-    modeTotals.total > 0
-      ? {
-          biometric: Math.round((modeTotals.biometric / modeTotals.total) * 100),
-          manual: Math.round((modeTotals.manual / modeTotals.total) * 100),
-          auto: Math.round((modeTotals.auto / modeTotals.total) * 100),
-        }
-      : { biometric: 0, manual: 0, auto: 0 };
 
   const loadManualStudents = useCallback(
     async (sessionId?: string) => {
@@ -625,26 +605,6 @@ export default function TeacherDashboard() {
 
       <div className="card mt-3">
         <h2>Session History</h2>
-        <div className="analytics-strip mt-1">
-          <div className="analytics-item">
-            <p className="text-dim text-sm">Biometric</p>
-            <p className="analytics-value">
-              {modeTotals.biometric} ({modePercentages.biometric}%)
-            </p>
-          </div>
-          <div className="analytics-item">
-            <p className="text-dim text-sm">Manual Override</p>
-            <p className="analytics-value">
-              {modeTotals.manual} ({modePercentages.manual}%)
-            </p>
-          </div>
-          <div className="analytics-item">
-            <p className="text-dim text-sm">Auto Absent</p>
-            <p className="analytics-value">
-              {modeTotals.auto} ({modePercentages.auto}%)
-            </p>
-          </div>
-        </div>
         {sessions.length === 0 ? (
           <p className="text-dim text-sm mt-1">No sessions yet</p>
         ) : (
