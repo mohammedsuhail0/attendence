@@ -119,6 +119,7 @@ export default function StudentDashboard() {
 
       const optionsRes = await fetch('/api/webauthn/register/options', {
         method: 'POST',
+        credentials: 'include',
       });
       const optionsData = await optionsRes.json();
 
@@ -131,6 +132,7 @@ export default function StudentDashboard() {
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ response: registrationResponse }),
       });
       const verifyData = await verifyRes.json();
@@ -156,10 +158,14 @@ export default function StudentDashboard() {
 
     const optionsRes = await fetch('/api/webauthn/authenticate/options', {
       method: 'POST',
+      credentials: 'include',
     });
     const optionsData = await optionsRes.json();
 
     if (!optionsRes.ok) {
+      if (optionsRes.status === 401 && optionsData.error === 'Unauthorized') {
+        throw new Error('Your session has expired. Please sign out and log in again.');
+      }
       throw new Error(optionsData.error || 'Unable to start biometric verification.');
     }
 
@@ -182,6 +188,7 @@ export default function StudentDashboard() {
       const res = await fetch('/api/attendance/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           token: token.toUpperCase(),
           assertion,
@@ -190,6 +197,9 @@ export default function StudentDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401 && data.error === 'Unauthorized') {
+          throw new Error('Your session has expired. Please sign out and log in again.');
+        }
         throw new Error(data.error || 'Failed to submit attendance.');
       }
 
