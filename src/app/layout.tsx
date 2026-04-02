@@ -15,8 +15,8 @@ const bodyFont = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: 'Smart attendenc',
-  description: 'A school where Islamic tarbiyah and academic excellence grow together.',
+  title: 'Smart Attendance',
+  description: 'Smart Attendance portal for token-based classroom tracking',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

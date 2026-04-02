@@ -162,10 +162,25 @@ export async function POST(request: Request) {
         session_id: session.id,
         student_id: user.id,
         status: 'present',
+        mark_mode: 'biometric',
       });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const isLegacySchema = String(error.message).includes('mark_mode');
+      if (isLegacySchema) {
+        const { error: fallbackError } = await admin
+          .from('attendance_records')
+          .insert({
+            session_id: session.id,
+            student_id: user.id,
+            status: 'present',
+          });
+        if (fallbackError) {
+          return NextResponse.json({ error: fallbackError.message }, { status: 500 });
+        }
+      } else {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ message: 'Attendance marked successfully' }, { status: 201 });

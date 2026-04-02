@@ -14,6 +14,7 @@ CREATE TABLE profiles (
   department TEXT,
   section TEXT,
   roll_number TEXT,
+  photo_path TEXT,
   webauthn_credential JSONB,
   webauthn_challenge TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -59,6 +60,8 @@ CREATE TABLE attendance_records (
   session_id UUID NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
   student_id UUID NOT NULL REFERENCES profiles(id),
   status TEXT NOT NULL CHECK (status IN ('present', 'absent')),
+  mark_mode TEXT NOT NULL DEFAULT 'biometric',
+  marked_by UUID REFERENCES profiles(id),
   marked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(session_id, student_id)
 );
