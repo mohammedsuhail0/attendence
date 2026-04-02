@@ -52,6 +52,7 @@ export default function TeacherDashboard() {
   const [manualLoading, setManualLoading] = useState(false);
   const [manualSavingId, setManualSavingId] = useState<string | null>(null);
   const [manualSearch, setManualSearch] = useState('');
+  const [showManualList, setShowManualList] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -408,13 +409,26 @@ export default function TeacherDashboard() {
           <div className="manual-override mt-3">
             <div className="flex-between">
               <h3>Manual Override (Photo)</h3>
-              <button
-                className="btn btn-outline btn-sm"
-                onClick={() => loadManualStudents()}
-                disabled={manualLoading}
-              >
-                {manualLoading ? 'Refreshing...' : 'Refresh List'}
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {showManualList && (
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setShowManualList(false)}
+                  >
+                    Hide List
+                  </button>
+                )}
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    loadManualStudents();
+                    setShowManualList(true);
+                  }}
+                  disabled={manualLoading}
+                >
+                  {manualLoading ? 'Refreshing...' : 'Refresh List'}
+                </button>
+              </div>
             </div>
             <p className="text-dim text-sm mt-1">
               Use when a student cannot submit from phone. Verify face and mark present.
@@ -427,11 +441,17 @@ export default function TeacherDashboard() {
                 className="form-input"
                 placeholder="Search by full roll, last digits (e.g. 047), name, or email"
                 value={manualSearch}
-                onChange={(e) => setManualSearch(e.target.value)}
+                onChange={(e) => {
+                  setManualSearch(e.target.value);
+                  setShowManualList(true);
+                }}
+                onFocus={() => setShowManualList(true)}
               />
             </div>
 
-            {manualLoading ? (
+            {showManualList && (
+              <div className="mt-2">
+                {manualLoading ? (
               <p className="text-dim text-sm">Loading students...</p>
             ) : filteredManualStudents.length === 0 ? (
               <p className="text-dim text-sm">No students match your search.</p>
@@ -490,6 +510,8 @@ export default function TeacherDashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
               </div>
             )}
           </div>
