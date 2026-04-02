@@ -8,9 +8,7 @@ const OUTPUT_CSV = "data/photo-extract/photo-enrollment-manifest.csv";
 const OUTPUT_JSON = "data/photo-extract/photo-enrollment-manifest.json";
 const TARGET_ROLL_PREFIX = "160524737";
 const SOURCE_SUFFIX_OVERRIDES = {
-  // Source extraction has these two labels swapped.
-  "046": "047",
-  "047": "046",
+  // No longer needed: shifts are handled computationally below.
 };
 
 function parseCsv(filePath) {
@@ -85,10 +83,20 @@ function main() {
   const records = [];
   const usedFaces = new Set();
   for (const student of mappedStudents) {
-    const sourceSuffix =
-      SOURCE_SUFFIX_OVERRIDES[student.roll_suffix] || student.roll_suffix;
+    let sourceSuffix = SOURCE_SUFFIX_OVERRIDES[student.roll_suffix] || student.roll_suffix;
+    const rollSuffixNum = parseInt(student.roll_suffix, 10);
+    
+    // Student 160524737045 didn't have a photo in the source PDF.
+    if (rollSuffixNum === 45) {
+      sourceSuffix = "MISSING_PHOTO_DELIBERATE";
+    } else if (rollSuffixNum > 45) {
+      // Due to missing photo for 45, all extracted indices from 45 onwards are shifted down.
+      // So student 046 gets image student_045.png
+      sourceSuffix = String(rollSuffixNum - 1).padStart(3, '0');
+    }
+
     const sourceFile = `student_${sourceSuffix}.png`;
-    if (!availableFaceSet.has(sourceFile)) {
+    if (!availableFaceSet.has(sourceFile) || sourceSuffix === "MISSING_PHOTO_DELIBERATE") {
       records.push({
         roll_number: student.roll_number,
         roll_suffix: student.roll_suffix,
