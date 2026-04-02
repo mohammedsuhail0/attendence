@@ -58,11 +58,35 @@ export async function POST(
         session_id: id,
         student_id: e.student_id,
         status: 'absent' as const,
+        mark_mode: 'auto_absent' as const,
+        marked_by: user.id,
       }));
 
     // Bulk insert absent records
     if (absentStudents.length > 0) {
-      await admin.from('attendance_records').insert(absentStudents);
+      const { error: insertError } = await admin
+        .from('attendance_records')
+        .insert(absentStudents);
+      if (insertError) {
+        const isLegacySchema =
+          String(insertError.message).includes('mark_mode') ||
+          String(insertError.message).includes('marked_by');
+        if (isLegacySchema) {
+          const fallbackRows = absentStudents.map((row) => ({
+            session_id: row.session_id,
+            student_id: row.student_id,
+            status: row.status,
+          }));
+          const { error: fallbackError } = await admin
+            .from('attendance_records')
+            .insert(fallbackRows);
+          if (fallbackError) {
+            return NextResponse.json({ error: fallbackError.message }, { status: 500 });
+          }
+        } else {
+          return NextResponse.json({ error: insertError.message }, { status: 500 });
+        }
+      }
     }
 
     return NextResponse.json({

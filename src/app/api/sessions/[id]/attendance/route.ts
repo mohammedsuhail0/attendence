@@ -30,7 +30,9 @@ export async function GET(
     // Get attendance records with student profiles
     const { data: records, error } = await supabase
       .from('attendance_records')
-      .select('*, profiles!attendance_records_student_id_fkey(full_name, roll_number, email)')
+      .select(
+        '*, profiles!attendance_records_student_id_fkey(full_name, roll_number, email, photo_path)'
+      )
       .eq('session_id', id)
       .order('marked_at', { ascending: true });
 

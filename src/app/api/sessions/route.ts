@@ -129,7 +129,74 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ sessions });
+    if (!sessions || sessions.length === 0) {
+      return NextResponse.json({ sessions: [] });
+    }
+
+    const sessionIds = sessions.map((session) => session.id);
+    const { data: records, error: recordsError } = await supabase
+      .from('attendance_records')
+      .select('session_id, status, mark_mode')
+      .in('session_id', sessionIds);
+
+    if (recordsError) {
+      return NextResponse.json({ error: recordsError.message }, { status: 500 });
+    }
+
+    const summaryBySessionId = new Map<
+      string,
+      {
+        total: number;
+        present: number;
+        absent: number;
+        biometric: number;
+        manual_override: number;
+        auto_absent: number;
+      }
+    >();
+
+    for (const sessionId of sessionIds) {
+      summaryBySessionId.set(sessionId, {
+        total: 0,
+        present: 0,
+        absent: 0,
+        biometric: 0,
+        manual_override: 0,
+        auto_absent: 0,
+      });
+    }
+
+    for (const record of records || []) {
+      const summary = summaryBySessionId.get(record.session_id);
+      if (!summary) continue;
+
+      summary.total += 1;
+      if (record.status === 'present') summary.present += 1;
+      if (record.status === 'absent') summary.absent += 1;
+
+      // Keep old records meaningful even before mark_mode existed.
+      const inferredMode =
+        record.mark_mode ||
+        (record.status === 'absent' ? 'auto_absent' : 'biometric');
+
+      if (inferredMode === 'biometric') summary.biometric += 1;
+      if (inferredMode === 'manual_override') summary.manual_override += 1;
+      if (inferredMode === 'auto_absent') summary.auto_absent += 1;
+    }
+
+    const sessionsWithSummary = sessions.map((session) => ({
+      ...session,
+      attendance_summary: summaryBySessionId.get(session.id) || {
+        total: 0,
+        present: 0,
+        absent: 0,
+        biometric: 0,
+        manual_override: 0,
+        auto_absent: 0,
+      },
+    }));
+
+    return NextResponse.json({ sessions: sessionsWithSummary });
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

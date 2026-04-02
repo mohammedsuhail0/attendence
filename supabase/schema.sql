@@ -14,12 +14,13 @@ CREATE TABLE profiles (
   department TEXT,
   section TEXT,
   roll_number TEXT,
+  photo_path TEXT,
   webauthn_credential JSONB,
   webauthn_challenge TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. Classes (department+section+subject combos)
+-- 2. Classes (department+year+subject combos; year is stored in section for compatibility)
 CREATE TABLE classes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   department TEXT NOT NULL,
@@ -45,7 +46,7 @@ CREATE TABLE attendance_sessions (
   class_id UUID NOT NULL REFERENCES classes(id),
   teacher_id UUID NOT NULL REFERENCES profiles(id),
   token TEXT NOT NULL,
-  period INTEGER NOT NULL CHECK (period BETWEEN 1 AND 8),
+  period INTEGER NOT NULL CHECK (period BETWEEN 1 AND 6),
   session_date DATE NOT NULL DEFAULT CURRENT_DATE,
   token_expires_at TIMESTAMPTZ NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed')),
@@ -59,6 +60,8 @@ CREATE TABLE attendance_records (
   session_id UUID NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
   student_id UUID NOT NULL REFERENCES profiles(id),
   status TEXT NOT NULL CHECK (status IN ('present', 'absent')),
+  mark_mode TEXT NOT NULL DEFAULT 'biometric',
+  marked_by UUID REFERENCES profiles(id),
   marked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(session_id, student_id)
 );

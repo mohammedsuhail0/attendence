@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "map:student-photos": "node scripts/map-student-photos.mjs",
+    "sync:student-photos": "node scripts/sync-student-photos-to-supabase.mjs"
   },
   "dependencies": {
     "next": "^14.2.0",
