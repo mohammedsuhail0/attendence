@@ -127,7 +127,7 @@ export async function GET(
     );
 
     students.sort((left, right) =>
-      (left.roll_number || '').localeCompare(right.roll_number || '')
+      String(left.roll_number || '').localeCompare(String(right.roll_number || ''))
     );
 
     return NextResponse.json({
