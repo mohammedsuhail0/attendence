@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { Class, AttendanceSession } from '@/types/database';
@@ -13,22 +13,6 @@ function getClassYear(cls: Class) {
   // Keep old demo data working while section values are moved from A/B labels to year numbers.
   return cls.section === 'A' ? '1' : cls.section;
 }
-
-type AttendanceRow = {
-  status: string;
-  mark_mode?: string | null;
-  profiles: { full_name: string; roll_number: string };
-};
-
-type ManualStudent = {
-  student_id: string;
-  full_name: string;
-  roll_number: string;
-  email: string;
-  photo_path: string | null;
-  photo_url: string | null;
-  attendance_status: 'present' | 'absent' | 'not_marked';
-};
 
 export default function TeacherDashboard() {
   const supabase = createClient();
@@ -47,17 +31,12 @@ export default function TeacherDashboard() {
   const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
   const [token, setToken] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
-  const [attendanceList, setAttendanceList] = useState<AttendanceRow[]>([]);
-  const [manualStudents, setManualStudents] = useState<ManualStudent[]>([]);
-  const [manualLoading, setManualLoading] = useState(false);
-  const [manualSavingId, setManualSavingId] = useState<string | null>(null);
-  const [manualSearch, setManualSearch] = useState('');
-  const [showManualList, setShowManualList] = useState(false);
+  const [attendanceList, setAttendanceList] = useState<
+    { status: string; profiles: { full_name: string; roll_number: string } }[]
+  >([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [viewingHistoryParams, setViewingHistoryParams] = useState<{ id: string; fetching: boolean } | null>(null);
-  const [historyAttendanceList, setHistoryAttendanceList] = useState<AttendanceRow[]>([]);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -137,44 +116,6 @@ export default function TeacherDashboard() {
     )
   ).sort((left, right) => left.localeCompare(right));
 
-  const filteredManualStudents = manualStudents.filter((student) => {
-    const queryText = manualSearch.trim().toLowerCase();
-    if (!queryText) return true;
-
-    const queryDigits = queryText.replace(/\D/g, '');
-    const studentRoll = student.roll_number.toLowerCase();
-    const studentRollDigits = studentRoll.replace(/\D/g, '');
-
-    if (queryDigits && studentRollDigits.endsWith(queryDigits)) return true;
-
-    return (
-      student.full_name.toLowerCase().includes(queryText) ||
-      studentRoll.includes(queryText) ||
-      student.email.toLowerCase().includes(queryText)
-    );
-  });
-
-
-
-  const loadManualStudents = useCallback(
-    async (sessionId?: string) => {
-      const targetSessionId = sessionId || activeSession?.id;
-      if (!targetSessionId) return;
-      setManualLoading(true);
-      const res = await fetch(`/api/sessions/${targetSessionId}/manual-override`);
-      const data = await res.json();
-      setManualLoading(false);
-
-      if (!res.ok) {
-        setError(data.error || 'Failed to load students for manual override');
-        return;
-      }
-
-      setManualStudents(data.students || []);
-    },
-    [activeSession?.id]
-  );
-
   useEffect(() => {
     if (!activeSession || activeSession.status === 'closed') return;
 
@@ -188,41 +129,6 @@ export default function TeacherDashboard() {
     const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
   }, [activeSession]);
-
-  useEffect(() => {
-    if (!activeSession || activeSession.status === 'closed') return;
-    loadManualStudents(activeSession.id);
-  }, [activeSession, loadManualStudents]);
-
-  async function markManualPresent(studentId: string) {
-    if (!activeSession) return;
-    setError('');
-    setSuccess('');
-    setManualSavingId(studentId);
-
-    const res = await fetch(`/api/sessions/${activeSession.id}/manual-override`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: studentId }),
-    });
-
-    const data = await res.json();
-    setManualSavingId(null);
-
-    if (!res.ok) {
-      setError(data.error || 'Manual override failed');
-      return;
-    }
-
-    setSuccess('Attendance marked via manual override');
-
-    const [attendanceRes] = await Promise.all([
-      fetch(`/api/sessions/${activeSession.id}/attendance`),
-      loadManualStudents(activeSession.id),
-    ]);
-    const attendanceData = await attendanceRes.json();
-    if (attendanceData.records) setAttendanceList(attendanceData.records);
-  }
 
   async function createSession(e: React.FormEvent) {
     e.preventDefault();
@@ -264,9 +170,6 @@ export default function TeacherDashboard() {
     setActiveSession(data.session);
     setToken(data.session.token);
     startTimer(data.session.token_expires_at);
-    setManualSearch('');
-    setAttendanceList([]);
-    loadManualStudents(data.session.id);
     setSuccess('Session created! Share the token with students.');
   }
 
@@ -292,9 +195,6 @@ export default function TeacherDashboard() {
       setActiveSession(null);
       setToken('');
       setTimeLeft(0);
-      setManualStudents([]);
-      setManualSearch('');
-      setAttendanceList([]);
       setSuccess(`Session closed. Present: ${data.present}, Absent: ${data.absent}`);
       const res2 = await fetch('/api/sessions');
       const d2 = await res2.json();
@@ -307,30 +207,6 @@ export default function TeacherDashboard() {
     router.push('/login');
     router.refresh();
   }
-
-  async function viewSessionHistory(sessionId: string) {
-    if (viewingHistoryParams?.id === sessionId) {
-      setViewingHistoryParams(null);
-      return;
-    }
-    setViewingHistoryParams({ id: sessionId, fetching: true });
-    setHistoryAttendanceList([]);
-    const res = await fetch(`/api/sessions/${sessionId}/attendance`);
-    const data = await res.json();
-    if (data.records) {
-      setHistoryAttendanceList(data.records);
-    }
-    setViewingHistoryParams({ id: sessionId, fetching: false });
-  }
-
-  const groupedSessions = sessions.reduce((acc, session) => {
-    const subject = session.classes?.subject || 'Unknown Subject';
-    if (!acc[subject]) {
-      acc[subject] = [];
-    }
-    acc[subject].push(session);
-    return acc;
-  }, {} as Record<string, typeof sessions>);
 
   return (
     <div className="page">
@@ -384,7 +260,6 @@ export default function TeacherDashboard() {
                       <th>Roll No</th>
                       <th>Name</th>
                       <th>Status</th>
-                      <th>Mode</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -397,7 +272,6 @@ export default function TeacherDashboard() {
                             {record.status}
                           </span>
                         </td>
-                        <td>{record.mark_mode || 'biometric'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -405,116 +279,6 @@ export default function TeacherDashboard() {
               </div>
             </div>
           )}
-
-          <div className="manual-override mt-3">
-            <div className="flex-between">
-              <h3>Manual Override (Photo)</h3>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {showManualList && (
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => setShowManualList(false)}
-                  >
-                    Hide List
-                  </button>
-                )}
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => {
-                    loadManualStudents();
-                    setShowManualList(true);
-                  }}
-                  disabled={manualLoading}
-                >
-                  {manualLoading ? 'Refreshing...' : 'Refresh List'}
-                </button>
-              </div>
-            </div>
-            <p className="text-dim text-sm mt-1">
-              Use when a student cannot submit from phone. Verify face and mark present.
-            </p>
-
-            <div className="form-group mt-2">
-              <label htmlFor="manual-search">Search Student</label>
-              <input
-                id="manual-search"
-                className="form-input"
-                placeholder="Search by full roll, last digits (e.g. 047), name, or email"
-                value={manualSearch}
-                onChange={(e) => {
-                  setManualSearch(e.target.value);
-                  setShowManualList(true);
-                }}
-                onFocus={() => setShowManualList(true)}
-              />
-            </div>
-
-            {showManualList && (
-              <div className="mt-2">
-                {manualLoading ? (
-              <p className="text-dim text-sm">Loading students...</p>
-            ) : filteredManualStudents.length === 0 ? (
-              <p className="text-dim text-sm">No students match your search.</p>
-            ) : (
-              <div className="table-wrapper mt-1">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Photo</th>
-                      <th>Roll No</th>
-                      <th>Name</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredManualStudents.map((student) => (
-                      <tr key={student.student_id}>
-                        <td>
-                          {student.photo_url ? (
-                            <img
-                              className="manual-photo"
-                              src={student.photo_url}
-                              alt={student.full_name}
-                            />
-                          ) : (
-                            <div className="manual-photo-placeholder">No Photo</div>
-                          )}
-                        </td>
-                        <td>{student.roll_number || '-'}</td>
-                        <td>{student.full_name || '-'}</td>
-                        <td>
-                          <span className={`badge badge-${student.attendance_status === 'not_marked' ? 'closed' : student.attendance_status}`}>
-                            {student.attendance_status === 'not_marked'
-                              ? 'not marked'
-                              : student.attendance_status}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            disabled={
-                              student.attendance_status === 'present' ||
-                              manualSavingId === student.student_id
-                            }
-                            onClick={() => markManualPresent(student.student_id)}
-                          >
-                            {manualSavingId === student.student_id
-                              ? 'Marking...'
-                              : student.attendance_status === 'present'
-                                ? 'Present'
-                                : 'Mark Present'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -639,93 +403,32 @@ export default function TeacherDashboard() {
         {sessions.length === 0 ? (
           <p className="text-dim text-sm mt-1">No sessions yet</p>
         ) : (
-          Object.entries(groupedSessions).map(([subject, subjectSessions]) => (
-            <div key={subject} className="mt-4">
-              <h3 className="mb-2" style={{ borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem', color: 'var(--primary)' }}>
-                {subject}
-              </h3>
-              <div className="table-wrapper mt-1">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Period</th>
-                      <th>Status</th>
-                      <th>P/A</th>
-                      <th>Bio</th>
-                      <th>Manual</th>
-                      <th>Auto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {subjectSessions.map((session) => (
-                      <React.Fragment key={session.id}>
-                        <tr 
-                          onClick={() => viewSessionHistory(session.id)}
-                          style={{ cursor: 'pointer' }}
-                          title="Click to view detailed attendance list"
-                        >
-                          <td>{session.session_date}</td>
-                          <td>P{session.period}</td>
-                          <td>
-                            <span className={`badge badge-${session.status}`}>
-                              {session.status}
-                            </span>
-                          </td>
-                          <td>
-                            {session.attendance_summary
-                              ? `${session.attendance_summary.present}/${session.attendance_summary.absent}`
-                              : '-'}
-                          </td>
-                          <td>{session.attendance_summary?.biometric ?? '-'}</td>
-                          <td>{session.attendance_summary?.manual_override ?? '-'}</td>
-                          <td>{session.attendance_summary?.auto_absent ?? '-'}</td>
-                        </tr>
-                        {viewingHistoryParams?.id === session.id && (
-                          <tr>
-                            <td colSpan={7} style={{ padding: '0', backgroundColor: 'var(--bg-accent, #fafafa)' }}>
-                              <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
-                                {viewingHistoryParams.fetching ? (
-                                  <p className="text-dim text-sm text-center my-2">Loading attendance list...</p>
-                                ) : historyAttendanceList.length === 0 ? (
-                                  <p className="text-dim text-sm text-center my-2">No attendance records found.</p>
-                                ) : (
-                                  <div className="table-wrapper" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                                    <table style={{ fontSize: '0.85rem', margin: 0, border: '1px solid var(--border)' }}>
-                                      <thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'var(--bg)' }}>
-                                        <tr>
-                                          <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Roll No</th>
-                                          <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Name</th>
-                                          <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Status</th>
-                                          <th style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)' }}>Mode</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {historyAttendanceList.map((record, index) => (
-                                          <tr key={index}>
-                                            <td style={{ padding: '0.5rem' }}>{record.profiles?.roll_number || '-'}</td>
-                                            <td style={{ padding: '0.5rem' }}>{record.profiles?.full_name || '-'}</td>
-                                            <td style={{ padding: '0.5rem' }}>
-                                              <span className={`badge badge-${record.status}`}>{record.status}</span>
-                                            </td>
-                                            <td style={{ padding: '0.5rem' }}>{record.mark_mode || 'biometric'}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))
+          <div className="table-wrapper mt-1">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Subject</th>
+                  <th>Period</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((session) => (
+                  <tr key={session.id}>
+                    <td>{session.session_date}</td>
+                    <td>{session.classes?.subject || '-'}</td>
+                    <td>P{session.period}</td>
+                    <td>
+                      <span className={`badge badge-${session.status}`}>
+                        {session.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
