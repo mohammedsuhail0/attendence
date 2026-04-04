@@ -1,5 +1,4 @@
 'use client';
-// build-v1.1
 
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -29,9 +28,6 @@ const HistoryIcon = () => (
 );
 const UserIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-);
-const InfoIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
 );
 const UploadIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -79,6 +75,15 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function getDisplayUrl(customPath: string | null, officialPath: string | null) {
+  const activePath = customPath || officialPath;
+  if (!activePath) return null;
+  if (activePath.startsWith('db:')) {
+    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${activePath.split(':')[1]}`;
+  }
+  return null; // For storage paths, a signed URL is needed. This is a placeholder for non-async parts.
+}
+
 export default function StudentDashboard() {
   const supabase = createClient();
   const router = useRouter();
@@ -90,74 +95,61 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
-  const [biometricReady, setBiometricReady] = useState<boolean | null>(null);
+  const [hasWebAuthn, setHasWebAuthn] = useState(false);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [currentTab, setCurrentTab] = useState<'home' | 'subjects' | 'history' | 'profile'| 'leaderboard'>('subjects');
+  const [currentTab, setCurrentTab] = useState<'home' | 'subjects' | 'history' | 'profile' | 'leaderboard'>('subjects');
   
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
-  // --- Photo Fetching Logic (Dual Path) ---
-  const getPhotoUrl = useCallback(async (customPath: string | null, officialPath: string | null) => {
+  const fetchPhotoUrl = useCallback(async (customPath: string | null, officialPath: string | null) => {
     const activePath = customPath || officialPath;
-    if (!activePath) return null;
-    
+    if (!activePath) { setPhotoUrl(null); return; }
     if (activePath.startsWith('db:')) {
-      return `https://api.dicebear.com/7.x/avataaars/svg?seed=${activePath.split(':')[1]}`;
+      setPhotoUrl(`https://api.dicebear.com/7.x/avataaars/svg?seed=${activePath.split(':')[1]}`);
     } else {
       const { data } = await supabase.storage.from('student-photos').createSignedUrl(activePath, 3600);
-      return data?.signedUrl || null;
+      if (data) setPhotoUrl(data.signedUrl);
     }
   }, [supabase]);
 
-  const loadProfilePhoto = useCallback(async (p: StudentProfile) => {
-    const url = await getPhotoUrl(p.custom_photo_path, p.photo_path);
-    setPhotoUrl(url);
-  }, [getPhotoUrl]);
+  const loadHistory = useCallback(async () => {
+    const res = await fetch('/api/attendance/history');
+    const data = await res.json();
+    if (data.records) setRecords(data.records);
+  }, []);
+
+  const loadLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true);
+    try {
+      const res = await fetch('/api/attendance/leaderboard');
+      const data = await res.json();
+      if (data.leaderboard) setLeaderboard(data.leaderboard);
+    } catch { setError('Failed to load leaderboard.'); }
+    finally { setLeaderboardLoading(false); }
+  }, []);
 
   useEffect(() => {
-    async function load() {
+    async function init() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       if (p) {
         setProfile(p as StudentProfile);
         setHasBiometric(Boolean(p.webauthn_credential));
-        loadProfilePhoto(p as StudentProfile);
+        fetchPhotoUrl(p.custom_photo_path, p.photo_path);
       }
-
-      const res = await fetch('/api/attendance/history');
-      const data = await res.json();
-      if (data.records) setRecords(data.records);
+      loadHistory();
+      setHasWebAuthn(browserSupportsWebAuthn());
     }
-    load();
-  }, [supabase, loadProfilePhoto]);
+    init();
+  }, [supabase, fetchPhotoUrl, loadHistory]);
 
   useEffect(() => {
-    if (currentTab === 'leaderboard') {
-      // Logic for calculating top attendance (Dummy logic for now, usually needs a real API)
-      setLeaderboard([
-        { id: '1', full_name: 'Aditya Kumar', custom_photo_path: 'db:Felix', photo_path: null, percentage: 98 },
-        { id: '2', full_name: 'Priya Sharma', custom_photo_path: 'db:Luna', photo_path: null, percentage: 95 },
-        { id: '3', full_name: 'Suhail Ahmed', custom_photo_path: profile?.custom_photo_path || null, photo_path: profile?.photo_path || null, percentage: 92 },
-        { id: '4', full_name: 'Rahul Varma', custom_photo_path: 'db:Ginger', photo_path: null, percentage: 88 },
-      ]);
-    }
-  }, [currentTab, profile]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function checkBiometricSupport() {
-      const secureContext = window.isSecureContext;
-      const webAuthnSupported = browserSupportsWebAuthn();
-      const platformSupported = secureContext && webAuthnSupported ? await platformAuthenticatorIsAvailable() : false;
-      if (!cancelled) setBiometricReady(secureContext && webAuthnSupported && platformSupported);
-    }
-    checkBiometricSupport();
-    return () => { cancelled = true; };
-  }, []);
+    if (currentTab === 'leaderboard') loadLeaderboard();
+  }, [currentTab, loadLeaderboard]);
 
   async function registerBiometric() {
     setError(''); setSuccess(''); setBiometricBusy(true);
@@ -188,9 +180,7 @@ export default function StudentDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSuccess('Attendance marked!'); setToken('');
-      const res2 = await fetch('/api/attendance/history');
-      const d2 = await res2.json();
-      if (d2.records) setRecords(d2.records);
+      loadHistory();
     } catch (e: unknown) { setError(toErrorMessage(e, 'Failed.')); } finally { setLoading(false); }
   }
 
@@ -199,9 +189,8 @@ export default function StudentDashboard() {
     const newPath = `db:${seed}`;
     const { error } = await supabase.from('profiles').update({ custom_photo_path: newPath }).eq('id', profile.id);
     if (!error) {
-      const updatedProfile = { ...profile, custom_photo_path: newPath };
-      setProfile(updatedProfile);
-      loadProfilePhoto(updatedProfile);
+      setProfile({ ...profile, custom_photo_path: newPath });
+      fetchPhotoUrl(newPath, profile.photo_path);
       setSuccess('Avatar updated.');
     }
   }
@@ -214,12 +203,32 @@ export default function StudentDashboard() {
       const filePath = `custom/${profile.id}_${Date.now()}.${file.name.split('.').pop()}`;
       await supabase.storage.from('student-photos').upload(filePath, file);
       await supabase.from('profiles').update({ custom_photo_path: filePath }).eq('id', profile.id);
-      const updatedProfile = { ...profile, custom_photo_path: filePath };
-      setProfile(updatedProfile);
-      loadProfilePhoto(updatedProfile);
+      setProfile({ ...profile, custom_photo_path: filePath });
+      fetchPhotoUrl(filePath, profile.photo_path);
       setSuccess('Photo uploaded.');
     } catch (err) { setError(toErrorMessage(err, 'Upload failed.')); } finally { setUploading(false); }
   }
+
+  // --- Aggregate Metrics ---
+  const subjectMap = new Map<string, { total: number; present: number; code: string }>();
+  for (const r of records) {
+    const s = r.attendance_sessions?.classes?.subject || 'Unknown';
+    const e = subjectMap.get(s) || { 
+      total: 0, 
+      present: 0, 
+      code: s.match(/^[A-Z]{2,4}\d{2,4}/)?.[0] || s.substring(0, 3).toUpperCase() + '101' 
+    };
+    e.total++; if (r.status === 'present') e.present++;
+    subjectMap.set(s, e);
+  }
+  const subjects = Array.from(subjectMap.entries()).map(([name, stats]) => ({
+    name: name.replace(/^[A-Z]{2,4}\d{2,4}\s*(-|:)?\s*/, ''),
+    ...stats,
+    pct: Math.round((stats.present / stats.total) * 100)
+  }));
+
+  const globalPresent = records.filter(r => r.status === 'present').length;
+  const globalPct = records.length > 0 ? Math.round((globalPresent / records.length) * 100) : 0;
 
   const displayPhoto = photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.full_name || 'Student'}`;
 
@@ -238,45 +247,54 @@ export default function StudentDashboard() {
           <>
             <div className="sc-title-group"><h2>Course Summary</h2><p>Overview of your current standing</p></div>
             <div className="sc-summary-grid">
-              <div className="sc-card-aggregate"><span className="sc-label">Aggregate Attendance</span><span className="sc-value-xl">{records.length > 0 ? Math.round((records.filter(r => r.status === 'present').length / records.length) * 100) : 0}%</span></div>
-              <div className="sc-card-total"><div className="sc-icon-box"><CalendarIcon /></div><div><span className="sc-label">Total Ratio</span><span className="sc-value-lg">{records.filter(r => r.status === 'present').length}/{records.length}</span></div></div>
+              <div className="sc-card-aggregate"><span className="sc-label">Aggregate Attendance</span><span className="sc-value-xl">{globalPct}%</span></div>
+              <div className="sc-card-total"><div className="sc-icon-box"><CalendarIcon /></div><div><span className="sc-label">Total Ratio</span><span className="sc-value-lg">{globalPresent}/{records.length}</span></div></div>
             </div>
             <section>
               <div className="sc-section-header"><h3>Active Subjects</h3></div>
-              {/* Subjects mapping remains same as previous good implementation */}
-              <div className="sc-course-card"><p className="text-dim">Tracking latest session data...</p></div>
+              {subjects.map(sub => (
+                <div key={sub.code} className="sc-course-card">
+                  <div className="sc-course-top"><span className="sc-course-code">{sub.code}</span><span className={`sc-pct-badge ${sub.pct >= 75 ? 'good' : 'bad'}`}>{sub.pct}%</span></div>
+                  <h4 className="sc-course-name">{sub.name}</h4>
+                  <div className="sc-course-bottom"><span>Attended: {sub.present}/{sub.total}</span></div>
+                  <div className="sc-progress-track"><div className={`sc-progress-bar ${sub.pct >= 75 ? 'good' : 'bad'}`} style={{ width: `${sub.pct}%` }} /></div>
+                </div>
+              ))}
+              {subjects.length === 0 && <div className="sc-course-card"><p className="text-dim">No subject data found. Start marking attendance!</p></div>}
             </section>
           </>
         )}
 
         {currentTab === 'leaderboard' && (
           <>
-            <div className="sc-title-group"><h2>Leaderboard</h2><p>Top attendance among students</p></div>
-            <div className="sc-course-card" style={{ padding: '0.75rem' }}>
-              {leaderboard.map((entry, i) => (
-                <div key={entry.id} className="flex-between" style={{ padding: '0.75rem', borderBottom: i < leaderboard.length - 1 ? '1px solid var(--scholarly-border)' : 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ fontWeight: 800, color: 'var(--scholarly-primary)', width: '20px' }}>#{i+1}</span>
-                    <img 
-                      src={entry.custom_photo_path?.startsWith('db:') ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.custom_photo_path.split(':')[1]}` : displayPhoto} 
-                      alt={entry.full_name} 
-                      style={{ width: '40px', height: '40px', borderRadius: '50%' }} 
-                    />
-                    <div>
-                      <h4 style={{ fontWeight: 700, fontSize: '0.95rem' }}>{entry.full_name}</h4>
-                      <p className="sc-timestamp">Continuous Attendance</p>
+            <div className="sc-title-group"><h2>Leaderboard</h2><p>Top attendance in your class</p></div>
+            {leaderboardLoading ? <div className="sc-course-card"><p className="text-dim">Crunching data...</p></div> : (
+              <div className="sc-course-card" style={{ padding: '0.75rem' }}>
+                {leaderboard.length === 0 ? <p className="text-dim text-center">Class data pending first sessions.</p> : leaderboard.map((entry, i) => (
+                  <div key={entry.id} className="flex-between" style={{ padding: '0.75rem', borderBottom: i < leaderboard.length - 1 ? '1px solid var(--scholarly-border)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <span style={{ fontWeight: 800, color: 'var(--scholarly-primary)', width: '20px' }}>#{i+1}</span>
+                      <img 
+                        src={entry.custom_photo_path?.startsWith('db:') ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.custom_photo_path.split(':')[1]}` : (entry.photo_path ? `/api/get-signed-url?path=${entry.photo_path}` : `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.full_name}`)} 
+                        alt={entry.full_name} 
+                        style={{ width: '40px', height: '40px', borderRadius: '50%' }} 
+                      />
+                      <div>
+                        <h4 style={{ fontWeight: 700, fontSize: '0.95rem' }}>{entry.full_name}</h4>
+                        <p className="sc-timestamp">{entry.percentage >= 90 ? 'Attendance Pro' : 'Regular Student'}</p>
+                      </div>
                     </div>
+                    <div className={`sc-pct-badge ${entry.percentage >= 75 ? 'good' : 'bad'}`}>{entry.percentage}%</div>
                   </div>
-                  <div className="sc-pct-badge good">{entry.percentage}%</div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
         {currentTab === 'home' && (
           <>
-            <div className="sc-title-group"><h2>Welcome, {profile?.full_name?.split(' ')[0]}</h2><p>Ready to mark attendance?</p></div>
+            <div className="sc-title-group"><h2>Welcome back</h2><p>Mark today's session</p></div>
             {error && <div className="alert alert-error">{error}</div>}
             {success && <div className="alert alert-success">{success}</div>}
             <div className="sc-course-card">
@@ -286,21 +304,41 @@ export default function StudentDashboard() {
                   <input type="text" className="form-input" placeholder="____" value={token} onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))} maxLength={4}
                     style={{ fontFamily: 'var(--mono)', fontSize: '2rem', textAlign: 'center', letterSpacing: '0.4em' }} required />
                 </div>
-                <button type="submit" className="btn btn-primary btn-block" disabled={loading || token.length !== 4}>Verify & Mark</button>
+                <button type="submit" className="btn btn-primary btn-block" disabled={loading || token.length !== 4}>{loading ? 'Verifying...' : 'Submit Attendance'}</button>
               </form>
+            </div>
+          </>
+        )}
+
+        {currentTab === 'history' && (
+          <>
+            <div className="sc-title-group"><h2>History</h2><p>Your logbook entries</p></div>
+            <div className="sc-course-card" style={{ padding: '0.5rem' }}>
+              <div className="table-wrapper">
+                <table>
+                  <thead><tr><th>Date</th><th>Subject</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {records.map(r => (
+                      <tr key={r.id}>
+                        <td>{r.attendance_sessions?.session_date}</td>
+                        <td>{r.attendance_sessions?.classes?.subject || 'N/A'}</td>
+                        <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
+                      </tr>
+                    ))}
+                    {records.length === 0 && <tr><td colSpan={3} className="text-center text-dim">No records found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}
 
         {currentTab === 'profile' && (
           <>
-            <div className="sc-title-group"><h2>Student Profile</h2><p>Personalize your experience</p></div>
-            {error && <div className="alert alert-error">{error}</div>}
-            {success && <div className="alert alert-success">{success}</div>}
-            
+            <div className="sc-title-group"><h2>Profile</h2><p>Manage your identity</p></div>
             <div className="sc-course-card text-center">
-              <img src={displayPhoto} alt="Profile" style={{ width: '120px', height: '120px', borderRadius: '50%', border: '4px solid var(--scholarly-secondary)', marginBottom: '1rem' }} />
-              <h3 style={{ fontSize: '1.5rem', fontWeight: 800 }}>{profile?.full_name}</h3>
+              <img src={displayPhoto} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', border: '4px solid var(--scholarly-secondary)', marginBottom: '1rem' }} />
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{profile?.full_name}</h3>
               <p className="sc-timestamp">Official Roll: {profile?.roll_number}</p>
               
               <div className="sc-avatar-picker text-left">
@@ -317,13 +355,13 @@ export default function StudentDashboard() {
               <div className="sc-upload-section">
                 <label className="sc-file-label">
                   <UploadIcon />
-                  <span>{uploading ? 'Processing...' : 'Upload Gallery Photo'}</span>
+                  <span>{uploading ? 'Uploading...' : 'Upload Gallery Photo'}</span>
                   <input type="file" className="sc-file-input" accept="image/*" onChange={handlePhotoUpload} disabled={uploading} />
                 </label>
               </div>
 
               <div className="mt-3">
-                <button className="btn btn-outline btn-block mb-2" onClick={registerBiometric} disabled={biometricBusy}>Passkey Settings</button>
+                <button className="btn btn-outline btn-block mb-2" onClick={registerBiometric} disabled={biometricBusy}>{hasBiometric ? 'Update Passkey' : 'Register Passkey'}</button>
                 <button className="btn btn-danger btn-block" onClick={() => { supabase.auth.signOut(); router.push('/login'); }}>Sign Out</button>
               </div>
             </div>
