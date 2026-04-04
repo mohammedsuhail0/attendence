@@ -59,6 +59,14 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function monthLabel(monthValue: string): string {
+  const [year, month] = monthValue.split('-');
+  const monthIndex = Number(month) - 1;
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  if (!year || Number.isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return monthValue;
+  return `${monthNames[monthIndex]} ${year}`;
+}
+
 export default function StudentDashboard() {
   const supabase = createClient();
   const router = useRouter();
@@ -77,6 +85,8 @@ export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'history' | 'profile'>('dashboard');
   const [profileImage, setProfileImage] = useState<string>(DEFAULT_AVATARS[0]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [historyMonthFilter, setHistoryMonthFilter] = useState('all');
+  const [historyDateFilter, setHistoryDateFilter] = useState('all');
 
   async function loadLeaderboard() {
     setLeaderboardLoading(true);
@@ -269,23 +279,57 @@ export default function StudentDashboard() {
     subjectMap.set(subject, entry);
   }
 
-  const sortedHistoryRecords = useMemo(() => {
-    const copy = [...records];
-    copy.sort((left, right) => {
-      const leftSubject = left.attendance_sessions?.classes?.subject || '';
-      const rightSubject = right.attendance_sessions?.classes?.subject || '';
-      const subjectCompare = leftSubject.localeCompare(rightSubject);
-      if (subjectCompare !== 0) return subjectCompare;
-
-      const leftDate = left.attendance_sessions?.session_date || '';
-      const rightDate = right.attendance_sessions?.session_date || '';
-      const dateCompare = rightDate.localeCompare(leftDate);
-      if (dateCompare !== 0) return dateCompare;
-
-      return (left.attendance_sessions?.period || 0) - (right.attendance_sessions?.period || 0);
-    });
-    return copy;
+  const historyMonthOptions = useMemo(() => {
+    const months = new Set<string>();
+    for (const record of records) {
+      const date = record.attendance_sessions?.session_date;
+      if (date && date.length >= 7) months.add(date.slice(0, 7));
+    }
+    return Array.from(months).sort((left, right) => right.localeCompare(left));
   }, [records]);
+
+  const historyDateOptions = useMemo(() => {
+    const dates = new Set<string>();
+    for (const record of records) {
+      const date = record.attendance_sessions?.session_date;
+      if (!date) continue;
+      if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) continue;
+      dates.add(date);
+    }
+    return Array.from(dates).sort((left, right) => right.localeCompare(left));
+  }, [records, historyMonthFilter]);
+
+  useEffect(() => {
+    setHistoryDateFilter('all');
+  }, [historyMonthFilter]);
+
+  const filteredHistoryRecords = useMemo(() => {
+    return records
+      .filter((record) => {
+        const date = record.attendance_sessions?.session_date || '';
+        if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) return false;
+        if (historyDateFilter !== 'all' && date !== historyDateFilter) return false;
+        return true;
+      })
+      .sort((left, right) => {
+        const leftDate = left.attendance_sessions?.session_date || '';
+        const rightDate = right.attendance_sessions?.session_date || '';
+        const dateCompare = rightDate.localeCompare(leftDate);
+        if (dateCompare !== 0) return dateCompare;
+        return (left.attendance_sessions?.period || 0) - (right.attendance_sessions?.period || 0);
+      });
+  }, [records, historyMonthFilter, historyDateFilter]);
+
+  const groupedHistoryRecords = useMemo(() => {
+    const groups = new Map<string, AttendanceRecord[]>();
+    for (const record of filteredHistoryRecords) {
+      const date = record.attendance_sessions?.session_date || 'unknown';
+      const existing = groups.get(date) || [];
+      existing.push(record);
+      groups.set(date, existing);
+    }
+    return Array.from(groups.entries()).sort((left, right) => right[0].localeCompare(left[0]));
+  }, [filteredHistoryRecords]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -503,28 +547,68 @@ export default function StudentDashboard() {
           {records.length === 0 ? (
             <p className="text-dim text-sm mt-1">No records yet</p>
           ) : (
-            <div className="table-wrapper mt-1">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Subject</th>
-                    <th>Period</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedHistoryRecords.map((r) => (
-                    <tr key={r.id}>
-                      <td>{formatDisplayDate(r.attendance_sessions?.session_date || '-')}</td>
-                      <td>{r.attendance_sessions?.classes?.subject || '-'}</td>
-                      <td>P{r.attendance_sessions?.period}</td>
-                      <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
-                    </tr>
+            <>
+              <div className="history-filters mt-1">
+                <div className="history-filter-grid">
+                  <div className="form-group">
+                    <label htmlFor="student-history-month">Month</label>
+                    <select
+                      id="student-history-month"
+                      className="form-select"
+                      value={historyMonthFilter}
+                      onChange={(e) => setHistoryMonthFilter(e.target.value)}
+                    >
+                      <option value="all">All Months</option>
+                      {historyMonthOptions.map((month) => (
+                        <option key={month} value={month}>{monthLabel(month)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="student-history-date">Date</label>
+                    <select
+                      id="student-history-date"
+                      className="form-select"
+                      value={historyDateFilter}
+                      onChange={(e) => setHistoryDateFilter(e.target.value)}
+                    >
+                      <option value="all">All Dates</option>
+                      {historyDateOptions.map((date) => (
+                        <option key={date} value={date}>{formatDisplayDate(date)}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {groupedHistoryRecords.length === 0 ? (
+                <p className="text-dim text-sm">No sessions found for selected filters.</p>
+              ) : (
+                <div className="history-date-groups">
+                  {groupedHistoryRecords.map(([date, items], index) => (
+                    <details className="history-date-group" key={date} open={index === 0}>
+                      <summary className="history-date-summary">
+                        <span>{formatDisplayDate(date)}</span>
+                        <span className="history-date-count">{items.length} classes</span>
+                      </summary>
+                      <div className="history-date-content">
+                        {items.map((item) => (
+                          <article className="history-entry" key={item.id}>
+                            <div className="history-entry-top">
+                              <h4>{item.attendance_sessions?.classes?.subject || '-'}</h4>
+                              <span className="history-period-chip">P{item.attendance_sessions?.period || '-'}</span>
+                            </div>
+                            <div className="history-entry-bottom">
+                              <span className={`badge badge-${item.status}`}>{item.status}</span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </details>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}

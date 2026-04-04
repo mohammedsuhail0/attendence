@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { Class, AttendanceSession } from '@/types/database';
@@ -22,6 +22,14 @@ type ManualOverrideStudent = {
   photo_path?: string | null;
   attendance_status: 'present' | 'absent' | 'not_marked';
 };
+
+function monthLabel(monthValue: string): string {
+  const [year, month] = monthValue.split('-');
+  const monthIndex = Number(month) - 1;
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  if (!year || Number.isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return monthValue;
+  return `${monthNames[monthIndex]} ${year}`;
+}
 
 export default function TeacherDashboard() {
   const supabase = createClient();
@@ -48,6 +56,8 @@ export default function TeacherDashboard() {
   const [manualSubmittingId, setManualSubmittingId] = useState('');
   const [manualQuery, setManualQuery] = useState('');
   const [manualImageFallbacks, setManualImageFallbacks] = useState<Record<string, boolean>>({});
+  const [historyMonthFilter, setHistoryMonthFilter] = useState('all');
+  const [historyDateFilter, setHistoryDateFilter] = useState('all');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -129,6 +139,56 @@ export default function TeacherDashboard() {
         .map((cls) => cls.subject)
     )
   ).sort((left, right) => left.localeCompare(right));
+
+  const historyMonthOptions = useMemo(() => {
+    const months = new Set<string>();
+    for (const session of sessions) {
+      const date = session.session_date;
+      if (date && date.length >= 7) months.add(date.slice(0, 7));
+    }
+    return Array.from(months).sort((left, right) => right.localeCompare(left));
+  }, [sessions]);
+
+  const historyDateOptions = useMemo(() => {
+    const dates = new Set<string>();
+    for (const session of sessions) {
+      const date = session.session_date;
+      if (!date) continue;
+      if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) continue;
+      dates.add(date);
+    }
+    return Array.from(dates).sort((left, right) => right.localeCompare(left));
+  }, [sessions, historyMonthFilter]);
+
+  useEffect(() => {
+    setHistoryDateFilter('all');
+  }, [historyMonthFilter]);
+
+  const filteredHistorySessions = useMemo(() => {
+    return sessions
+      .filter((session) => {
+        const date = session.session_date || '';
+        if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) return false;
+        if (historyDateFilter !== 'all' && date !== historyDateFilter) return false;
+        return true;
+      })
+      .sort((left, right) => {
+        const dateCompare = right.session_date.localeCompare(left.session_date);
+        if (dateCompare !== 0) return dateCompare;
+        return left.period - right.period;
+      });
+  }, [sessions, historyMonthFilter, historyDateFilter]);
+
+  const groupedHistorySessions = useMemo(() => {
+    const groups = new Map<string, AttendanceSession[]>();
+    for (const session of filteredHistorySessions) {
+      const date = session.session_date || 'unknown';
+      const existing = groups.get(date) || [];
+      existing.push(session);
+      groups.set(date, existing);
+    }
+    return Array.from(groups.entries()).sort((left, right) => right[0].localeCompare(left[0]));
+  }, [filteredHistorySessions]);
 
   const loadAttendanceList = useCallback(async (sessionId: string) => {
     const res = await fetch(`/api/sessions/${sessionId}/attendance`);
@@ -558,32 +618,68 @@ export default function TeacherDashboard() {
         {sessions.length === 0 ? (
           <p className="text-dim text-sm mt-1">No sessions yet</p>
         ) : (
-          <div className="table-wrapper mt-1">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Subject</th>
-                  <th>Period</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((session) => (
-                  <tr key={session.id}>
-                    <td>{formatDisplayDate(session.session_date)}</td>
-                    <td>{session.classes?.subject || '-'}</td>
-                    <td>P{session.period}</td>
-                    <td>
-                      <span className={`badge badge-${session.status}`}>
-                        {session.status}
-                      </span>
-                    </td>
-                  </tr>
+          <>
+            <div className="history-filters mt-1">
+              <div className="history-filter-grid">
+                <div className="form-group">
+                  <label htmlFor="teacher-history-month">Month</label>
+                  <select
+                    id="teacher-history-month"
+                    className="form-select"
+                    value={historyMonthFilter}
+                    onChange={(e) => setHistoryMonthFilter(e.target.value)}
+                  >
+                    <option value="all">All Months</option>
+                    {historyMonthOptions.map((month) => (
+                      <option key={month} value={month}>{monthLabel(month)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="teacher-history-date">Date</label>
+                  <select
+                    id="teacher-history-date"
+                    className="form-select"
+                    value={historyDateFilter}
+                    onChange={(e) => setHistoryDateFilter(e.target.value)}
+                  >
+                    <option value="all">All Dates</option>
+                    {historyDateOptions.map((date) => (
+                      <option key={date} value={date}>{formatDisplayDate(date)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {groupedHistorySessions.length === 0 ? (
+              <p className="text-dim text-sm">No sessions found for selected filters.</p>
+            ) : (
+              <div className="history-date-groups">
+                {groupedHistorySessions.map(([date, items], index) => (
+                  <details className="history-date-group" key={date} open={index === 0}>
+                    <summary className="history-date-summary">
+                      <span>{formatDisplayDate(date)}</span>
+                      <span className="history-date-count">{items.length} sessions</span>
+                    </summary>
+                    <div className="history-date-content">
+                      {items.map((session) => (
+                        <article className="history-entry" key={session.id}>
+                          <div className="history-entry-top">
+                            <h4>{session.classes?.subject || '-'}</h4>
+                            <span className="history-period-chip">P{session.period}</span>
+                          </div>
+                          <div className="history-entry-bottom">
+                            <span className={`badge badge-${session.status}`}>{session.status}</span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </details>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
