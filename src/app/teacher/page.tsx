@@ -209,13 +209,13 @@ export default function TeacherDashboard() {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1>Teacher Dashboard</h1>
+    <div className="page teacher-app-shell">
+      <div className="page-header teacher-app-header">
+        <div className="teacher-title-wrap">
+          <h1>Teacher Studio</h1>
           <span className="user-info">{profile?.full_name}</span>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={handleLogout}>
+        <button className="btn btn-outline btn-sm teacher-logout-btn" onClick={handleLogout}>
           Sign Out
         </button>
       </div>
@@ -224,13 +224,13 @@ export default function TeacherDashboard() {
       {success && <div className="alert alert-success">{success}</div>}
 
       {activeSession && (
-        <div className="card" style={{ borderColor: 'var(--primary)' }}>
-          <div className="card-header">
+        <div className="card teacher-live-card" style={{ borderColor: 'var(--primary)' }}>
+          <div className="card-header teacher-card-header">
             <h2>Active Session</h2>
             <span className="badge badge-active">LIVE</span>
           </div>
 
-          <div className="token-display">
+          <div className="token-display teacher-token-display">
             <p className="text-dim text-sm">Share this token with students</p>
             <div className="token-code">{token}</div>
             <p className={`token-timer ${timeLeft > 0 ? 'active' : 'expired'}`}>
@@ -238,7 +238,7 @@ export default function TeacherDashboard() {
             </p>
           </div>
 
-          <div className="flex-between mt-2">
+          <div className="flex-between mt-2 teacher-live-actions">
             <button className="btn btn-primary btn-sm" onClick={refreshToken}>
               New Token
             </button>
@@ -283,9 +283,9 @@ export default function TeacherDashboard() {
       )}
 
       {!activeSession && (
-        <div className="card">
+        <div className="card teacher-create-card">
           <h2>Start New Session</h2>
-          <form onSubmit={createSession} className="mt-2">
+          <form onSubmit={createSession} className="mt-2 teacher-session-form">
             <div className="form-group">
               <label htmlFor="department-select">Department</label>
               <select
@@ -398,7 +398,7 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      <div className="card mt-3">
+      <div className="card mt-3 teacher-history-card">
         <h2>Session History</h2>
         {sessions.length === 0 ? (
           <p className="text-dim text-sm mt-1">No sessions yet</p>

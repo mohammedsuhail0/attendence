@@ -1443,3 +1443,149 @@ tr:last-child td { border-bottom: none; }
     grid-template-columns: auto 1fr auto;
   }
 }
+
+/* ========== TEACHER UI REFERENCE (V1) ========== */
+.teacher-app-shell {
+  width: min(480px, calc(100% - 0.9rem));
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 0.95rem 0.72rem calc(1.2rem + env(safe-area-inset-bottom));
+  background: #efeed9;
+}
+
+.teacher-app-header {
+  border-bottom: none;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0;
+  align-items: flex-start;
+}
+
+.teacher-title-wrap h1 {
+  margin: 0;
+  font-size: clamp(1.2rem, 5.2vw, 1.55rem);
+  font-family: var(--font);
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: #2c5a53;
+}
+
+.teacher-title-wrap .user-info {
+  display: block;
+  margin-top: 0.12rem;
+  color: #4f635f;
+}
+
+.teacher-logout-btn {
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.teacher-app-shell .card {
+  border-radius: 18px;
+  border: 1px solid rgba(17, 71, 52, 0.14);
+  background: rgba(250, 249, 244, 0.78);
+  box-shadow: 0 12px 28px rgba(24, 55, 43, 0.08);
+  padding: 1rem;
+}
+
+.teacher-card-header h2,
+.teacher-create-card h2,
+.teacher-history-card h2 {
+  font-size: clamp(1.12rem, 4.5vw, 1.34rem);
+  font-family: var(--font);
+  font-weight: 550;
+  color: #2f5f56;
+}
+
+.teacher-token-display {
+  background: #f7f7f3;
+  border: 1px solid rgba(17, 71, 52, 0.12);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.teacher-token-display .token-code {
+  font-size: clamp(2.1rem, 11vw, 2.8rem);
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  color: #2d5e55;
+}
+
+.teacher-live-actions {
+  gap: 0.58rem;
+}
+
+.teacher-live-actions .btn {
+  min-width: 44%;
+  border-radius: 12px;
+}
+
+.teacher-session-form .form-group label {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #4c605b;
+}
+
+.teacher-session-form .form-input,
+.teacher-session-form .form-select {
+  border-radius: 12px;
+  background: #f4f2e8;
+}
+
+.teacher-history-card .table-wrapper {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 71, 52, 0.11);
+}
+
+.teacher-history-card table th {
+  font-family: var(--font);
+  font-weight: 550;
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 560px) {
+  .teacher-app-shell {
+    width: min(100% - 0.45rem, 480px);
+    padding: 0.72rem 0.5rem calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .teacher-app-shell .card {
+    border-radius: 15px;
+    padding: 0.85rem;
+  }
+
+  .teacher-live-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .teacher-live-actions .btn {
+    width: 100%;
+  }
+
+  .teacher-token-display .token-code {
+    font-size: clamp(1.72rem, 9.4vw, 2.2rem);
+  }
+
+  .teacher-app-shell .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .teacher-app-shell table {
+    min-width: 470px;
+  }
+}
+
+@media (max-width: 380px) {
+  .teacher-app-shell {
+    width: calc(100% - 0.28rem);
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+
+  .teacher-app-header {
+    gap: 0.55rem;
+  }
+}
