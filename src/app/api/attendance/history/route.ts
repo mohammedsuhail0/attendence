@@ -13,7 +13,22 @@ export async function GET() {
     // Get student's attendance records with session and class details
     const { data: records, error } = await supabase
       .from('attendance_records')
-      .select('*, attendance_sessions(*, classes(*))')
+      .select(`
+        id,
+        status,
+        marked_at,
+        mark_mode,
+        attendance_sessions (
+          id,
+          session_date,
+          period,
+          classes (
+            subject,
+            department,
+            section
+          )
+        )
+      `)
       .eq('student_id', user.id)
       .order('marked_at', { ascending: false });
 
