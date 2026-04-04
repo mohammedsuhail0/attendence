@@ -1,11 +1,75 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { CreateSessionSchema } from '@/lib/schemas/session';
 import {
   generateToken,
   getDateStringInTimeZone,
   TOKEN_VALIDITY_SECONDS,
 } from '@/lib/utils';
+
+async function closeSessionAndMarkAbsent(
+  admin: ReturnType<typeof createAdminClient>,
+  {
+    sessionId,
+    classId,
+    teacherId,
+  }: {
+    sessionId: string;
+    classId: string;
+    teacherId: string;
+  }
+) {
+  await admin
+    .from('attendance_sessions')
+    .update({ status: 'closed' })
+    .eq('id', sessionId);
+
+  const { data: enrollments } = await admin
+    .from('enrollments')
+    .select('student_id')
+    .eq('class_id', classId);
+
+  const { data: presentRecords } = await admin
+    .from('attendance_records')
+    .select('student_id')
+    .eq('session_id', sessionId);
+
+  const presentIds = new Set((presentRecords ?? []).map((r) => r.student_id));
+  const absentStudents = (enrollments ?? [])
+    .filter((e) => !presentIds.has(e.student_id))
+    .map((e) => ({
+      session_id: sessionId,
+      student_id: e.student_id,
+      status: 'absent' as const,
+      mark_mode: 'auto_absent' as const,
+      marked_by: teacherId,
+    }));
+
+  if (absentStudents.length === 0) return;
+
+  const { error: insertError } = await admin
+    .from('attendance_records')
+    .insert(absentStudents);
+
+  if (!insertError) return;
+
+  const isLegacySchema =
+    String(insertError.message).includes('mark_mode') ||
+    String(insertError.message).includes('marked_by');
+
+  if (!isLegacySchema) return;
+
+  const fallbackRows = absentStudents.map((row) => ({
+    session_id: row.session_id,
+    student_id: row.student_id,
+    status: row.status,
+  }));
+
+  await admin
+    .from('attendance_records')
+    .insert(fallbackRows);
+}
 
 export async function POST(request: Request) {
   try {
@@ -112,6 +176,7 @@ export async function POST(request: Request) {
 export async function GET() {
   try {
     const supabase = await createClient();
+    const admin = createAdminClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -119,7 +184,7 @@ export async function GET() {
     }
 
     // Get teacher's sessions
-    const { data: sessions, error } = await supabase
+    let { data: sessions, error } = await supabase
       .from('attendance_sessions')
       .select('*, classes(*)')
       .eq('teacher_id', user.id)
@@ -131,6 +196,41 @@ export async function GET() {
 
     if (!sessions || sessions.length === 0) {
       return NextResponse.json({ sessions: [] });
+    }
+
+    const nowIso = new Date().toISOString();
+    const staleActiveSessions = sessions.filter(
+      (session) => session.status === 'active' && session.token_expires_at < nowIso
+    );
+
+    // Any active session with an expired token is stale; close it before returning history.
+    if (staleActiveSessions.length > 0) {
+      await Promise.all(
+        staleActiveSessions.map((session) =>
+          closeSessionAndMarkAbsent(admin, {
+            sessionId: session.id,
+            classId: session.class_id,
+            teacherId: user.id,
+          })
+        )
+      );
+
+      const refreshed = await supabase
+        .from('attendance_sessions')
+        .select('*, classes(*)')
+        .eq('teacher_id', user.id)
+        .order('created_at', { ascending: false });
+
+      sessions = refreshed.data || [];
+      error = refreshed.error;
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      if (!sessions || sessions.length === 0) {
+        return NextResponse.json({ sessions: [] });
+      }
     }
 
     const sessionIds = sessions.map((session) => session.id);

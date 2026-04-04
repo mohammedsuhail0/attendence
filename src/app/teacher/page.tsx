@@ -63,6 +63,8 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const closeInFlightRef = useRef(false);
+  const unloadCloseSentRef = useRef(false);
 
   useEffect(() => {
     const syncToday = () => {
@@ -95,7 +97,29 @@ export default function TeacherDashboard() {
 
       const res2 = await fetch('/api/sessions');
       const d2 = await res2.json();
-      if (d2.sessions) setSessions(d2.sessions);
+      if (d2.sessions) {
+        const allSessions = d2.sessions as AttendanceSession[];
+        const activeSessions = allSessions.filter((session) => session.status === 'active');
+
+        // Clean up stale backend state so teachers do not see lingering active sessions.
+        if (activeSessions.length > 0) {
+          await Promise.all(
+            activeSessions.map((session) =>
+              fetch(`/api/sessions/${session.id}/close`, { method: 'POST' })
+            )
+          );
+
+          const refreshed = await fetch('/api/sessions');
+          const refreshedData = await refreshed.json();
+          if (refreshedData.sessions) {
+            setSessions(refreshedData.sessions);
+          }
+          setSuccess(`${activeSessions.length} active session${activeSessions.length > 1 ? 's were' : ' was'} auto-closed.`);
+          return;
+        }
+
+        setSessions(allSessions);
+      }
     }
 
     load();
@@ -125,6 +149,56 @@ export default function TeacherDashboard() {
     },
     []
   );
+
+  const sendCloseOnExit = useCallback((sessionId: string) => {
+    if (!sessionId || unloadCloseSentRef.current) return;
+    unloadCloseSentRef.current = true;
+
+    const closeUrl = `/api/sessions/${sessionId}/close`;
+
+    // Keepalive fetch is preferred because it keeps auth cookies and follows same API behavior.
+    try {
+      void fetch(closeUrl, {
+        method: 'POST',
+        keepalive: true,
+      });
+    } catch {
+      // no-op
+    }
+
+    // Fallback for browsers where keepalive fetch may be unreliable during unload.
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        navigator.sendBeacon(closeUrl);
+      }
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeSession || activeSession.status === 'closed') {
+      unloadCloseSentRef.current = false;
+      return;
+    }
+
+    const sessionId = activeSession.id;
+    const handleBeforeUnload = () => {
+      sendCloseOnExit(sessionId);
+    };
+
+    const handlePageHide = () => {
+      sendCloseOnExit(sessionId);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [activeSession, sendCloseOnExit]);
 
   const departments = [...DEPARTMENT_OPTIONS];
   const years = [...YEAR_OPTIONS];
@@ -167,6 +241,7 @@ export default function TeacherDashboard() {
   const filteredHistorySessions = useMemo(() => {
     return sessions
       .filter((session) => {
+        if (session.status !== 'closed') return false;
         const date = session.session_date || '';
         if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) return false;
         if (historyDateFilter !== 'all' && date !== historyDateFilter) return false;
@@ -310,24 +385,35 @@ export default function TeacherDashboard() {
     }
   }
 
-  async function closeSession() {
-    if (!activeSession) return;
-    const res = await fetch(`/api/sessions/${activeSession.id}/close`, {
-      method: 'POST',
-    });
-    const data = await res.json();
-    if (res.ok) {
+  const closeSession = useCallback(async () => {
+    if (!activeSession || closeInFlightRef.current) return;
+    closeInFlightRef.current = true;
+
+    try {
+      const res = await fetch(`/api/sessions/${activeSession.id}/close`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to close session');
+        return;
+      }
+
       setActiveSession(null);
       setToken('');
       setTimeLeft(0);
       setManualStudents([]);
       setManualQuery('');
       setSuccess(`Session closed. Present: ${data.present}, Absent: ${data.absent}`);
+
       const res2 = await fetch('/api/sessions');
       const d2 = await res2.json();
       if (d2.sessions) setSessions(d2.sessions);
+      unloadCloseSentRef.current = false;
+    } finally {
+      closeInFlightRef.current = false;
     }
-  }
+  }, [activeSession]);
 
   const filteredManualStudents = manualStudents.filter((student) => {
     const q = manualQuery.trim().toLowerCase();
@@ -352,6 +438,9 @@ export default function TeacherDashboard() {
   }
 
   async function handleLogout() {
+    if (activeSession && activeSession.status !== 'closed') {
+      await closeSession();
+    }
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
