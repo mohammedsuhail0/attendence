@@ -1,4 +1,5 @@
 'use client';
+// build-v1.1
 
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -288,7 +289,7 @@ export default function StudentDashboard() {
                 <button type="submit" className="btn btn-primary btn-block" disabled={loading || token.length !== 4}>Verify & Mark</button>
               </form>
             </div>
-          </<ctrl42>>
+          </>
         )}
 
         {currentTab === 'profile' && (

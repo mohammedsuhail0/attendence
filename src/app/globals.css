@@ -4,7 +4,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Outfit:wght@100..900&display=swap');
 
 :root {
-  /* Scholarly Atelier Theme */
+  /* Design Theme */
   --scholarly-bg: #FDFBEA;
   --scholarly-primary: #4A675F;
   --scholarly-secondary: #D9E4D7;
@@ -252,7 +252,7 @@ tr:last-child td { border-bottom: none; }
   .analytics-strip { grid-template-columns: 1fr; }
 }
 
-/* ========== SCHOLARLY ATELIER COMPONENTS ========== */
+/* ========== DASHBOARD COMPONENTS ========== */
 .scholarly-page {
   max-width: 500px; /* Optimized for mobile layout in screenshot */
   margin: 0 auto;
