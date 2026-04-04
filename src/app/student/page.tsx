@@ -312,7 +312,7 @@ export default function StudentDashboard() {
       <div className="student-app-header">
         <div className="student-app-brand">
           <img src={profileImage} alt="Profile" className="student-app-avatar" />
-          <span>Scholarly Atelier</span>
+          <span>{profile?.full_name || 'Student'}</span>
         </div>
         <button className="student-app-gear" onClick={handleLogout} title="Sign Out" type="button">
           ⚙
@@ -432,7 +432,8 @@ export default function StudentDashboard() {
       {activeTab === 'subjects' && (
         <section className="card student-leaderboard mt-2">
           <div className="student-section-headline">
-            <h2>Subjects Leaderboard</h2>
+            <h2>Race to #1</h2>
+            <p className="student-race-copy">Beat the class average and climb the rank table.</p>
             <button className="btn btn-outline btn-sm" onClick={loadLeaderboard} type="button">
               Refresh
             </button>
@@ -522,7 +523,7 @@ export default function StudentDashboard() {
 
       <nav className="student-bottom-nav" aria-label="Student navigation">
         <button type="button" className={`student-bottom-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-        <button type="button" className={`student-bottom-item ${activeTab === 'subjects' ? 'active' : ''}`} onClick={() => setActiveTab('subjects')}>Subjects</button>
+        <button type="button" className={`student-bottom-item ${activeTab === 'subjects' ? 'active' : ''}`} onClick={() => setActiveTab('subjects')}>Race</button>
         <button type="button" className={`student-bottom-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>History</button>
         <button type="button" className={`student-bottom-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>Profile</button>
       </nav>
