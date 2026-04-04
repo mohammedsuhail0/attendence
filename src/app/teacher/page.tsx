@@ -23,6 +23,13 @@ type ManualOverrideStudent = {
   attendance_status: 'present' | 'absent' | 'not_marked';
 };
 
+type HistoryPresentStudent = {
+  student_id: string;
+  full_name: string;
+  roll_number: string;
+  mode: 'biometric' | 'manual_override';
+};
+
 function monthLabel(monthValue: string): string {
   const [year, month] = monthValue.split('-');
   const monthIndex = Number(month) - 1;
@@ -58,6 +65,8 @@ export default function TeacherDashboard() {
   const [manualImageFallbacks, setManualImageFallbacks] = useState<Record<string, boolean>>({});
   const [historyMonthFilter, setHistoryMonthFilter] = useState('all');
   const [historyDateFilter, setHistoryDateFilter] = useState('all');
+  const [historyPresentBySession, setHistoryPresentBySession] = useState<Record<string, HistoryPresentStudent[]>>({});
+  const [historyPresentLoadingBySession, setHistoryPresentLoadingBySession] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -264,6 +273,60 @@ export default function TeacherDashboard() {
     }
     return Array.from(groups.entries()).sort((left, right) => right[0].localeCompare(left[0]));
   }, [filteredHistorySessions]);
+
+  const loadHistoryPresentStudents = useCallback(async (sessionId: string) => {
+    if (!sessionId) return;
+    if (historyPresentLoadingBySession[sessionId]) return;
+
+    setHistoryPresentLoadingBySession((prev) => ({
+      ...prev,
+      [sessionId]: true,
+    }));
+
+    const res = await fetch(`/api/sessions/${sessionId}/attendance`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      setHistoryPresentLoadingBySession((prev) => ({
+        ...prev,
+        [sessionId]: false,
+      }));
+      return;
+    }
+
+    const presentStudents: HistoryPresentStudent[] = (data.records || [])
+      .filter((record: { status?: string }) => record.status === 'present')
+      .map(
+        (record: {
+          student_id: string;
+          mark_mode?: string | null;
+          profiles?: { full_name?: string | null; roll_number?: string | null };
+        }) => ({
+          student_id: record.student_id,
+          full_name: record.profiles?.full_name || 'Unknown Student',
+          roll_number: record.profiles?.roll_number || '-',
+          mode: record.mark_mode === 'manual_override' ? 'manual_override' : 'biometric',
+        })
+      );
+
+    setHistoryPresentBySession((prev) => ({
+      ...prev,
+      [sessionId]: presentStudents,
+    }));
+
+    setHistoryPresentLoadingBySession((prev) => ({
+      ...prev,
+      [sessionId]: false,
+    }));
+  }, [historyPresentLoadingBySession]);
+
+  useEffect(() => {
+    for (const session of filteredHistorySessions) {
+      const alreadyLoaded = Object.prototype.hasOwnProperty.call(historyPresentBySession, session.id);
+      if (alreadyLoaded || historyPresentLoadingBySession[session.id]) continue;
+      void loadHistoryPresentStudents(session.id);
+    }
+  }, [filteredHistorySessions, historyPresentBySession, historyPresentLoadingBySession, loadHistoryPresentStudents]);
 
   const loadAttendanceList = useCallback(async (sessionId: string) => {
     const res = await fetch(`/api/sessions/${sessionId}/attendance`);
@@ -760,6 +823,46 @@ export default function TeacherDashboard() {
                           </div>
                           <div className="history-entry-bottom">
                             <span className={`badge badge-${session.status}`}>{session.status}</span>
+                            <div className="history-session-stats">
+                              <p className="history-session-present">
+                                Present: {session.attendance_summary?.present ?? 0}
+                                {` / `}
+                                {session.attendance_summary?.total ?? 0}
+                              </p>
+                              <div className="history-session-modes">
+                                <span className="history-mode-chip">
+                                  Bio: {session.attendance_summary?.biometric ?? 0}
+                                </span>
+                                <span className="history-mode-chip">
+                                  Manual: {session.attendance_summary?.manual_override ?? 0}
+                                </span>
+                                <span className="history-mode-chip">
+                                  Auto Absent: {session.attendance_summary?.auto_absent ?? 0}
+                                </span>
+                              </div>
+                              <div className="history-student-section">
+                                <p className="history-student-label">Present students</p>
+                                {historyPresentLoadingBySession[session.id] ? (
+                                  <p className="history-student-empty">Loading students...</p>
+                                ) : (historyPresentBySession[session.id] || []).length === 0 ? (
+                                  <p className="history-student-empty">No present students.</p>
+                                ) : (
+                                  <div className="history-student-list">
+                                    {(historyPresentBySession[session.id] || []).map((student) => (
+                                      <div className="history-student-item" key={`${session.id}-${student.student_id}`}>
+                                        <div className="history-student-meta">
+                                          <span className="history-student-name">{student.full_name}</span>
+                                          <span className="history-student-roll">{student.roll_number}</span>
+                                        </div>
+                                        <span className={`history-student-mode ${student.mode}`}>
+                                          {student.mode === 'manual_override' ? 'Manual Override' : 'Biometric'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </article>
                       ))}

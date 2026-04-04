@@ -249,6 +249,109 @@ tr:last-child td { border-bottom: none; }
   margin-top: 0.42rem;
 }
 
+.history-session-stats {
+  margin-top: 0.42rem;
+}
+
+.history-session-present {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #3b5a53;
+  font-weight: 600;
+}
+
+.history-session-modes {
+  margin-top: 0.34rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.history-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: #4a665f;
+  background: rgba(17, 71, 52, 0.09);
+  border: 1px solid rgba(17, 71, 52, 0.11);
+}
+
+.history-student-section {
+  margin-top: 0.52rem;
+}
+
+.history-student-label {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #567067;
+  font-weight: 600;
+}
+
+.history-student-empty {
+  margin: 0.28rem 0 0;
+  font-size: 0.78rem;
+  color: #667c74;
+}
+
+.history-student-list {
+  margin-top: 0.35rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.history-student-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(17, 71, 52, 0.1);
+}
+
+.history-student-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.history-student-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #31524a;
+}
+
+.history-student-roll {
+  font-size: 0.72rem;
+  color: #6a8178;
+}
+
+.history-student-mode {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.14rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-student-mode.biometric {
+  color: #286f54;
+  background: rgba(39, 138, 99, 0.14);
+  border: 1px solid rgba(39, 138, 99, 0.2);
+}
+
+.history-student-mode.manual_override {
+  color: #7b5d1b;
+  background: rgba(196, 154, 70, 0.2);
+  border: 1px solid rgba(196, 154, 70, 0.32);
+}
+
 /* ========== ALERT ========== */
 .alert {
   padding: 0.75rem 1rem; border-radius: var(--radius-sm);
