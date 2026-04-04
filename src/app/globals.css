@@ -1031,3 +1031,318 @@ tr:last-child td { border-bottom: none; }
     bottom: 1rem;
   }
 }
+
+/* ========== STUDENT UI REFERENCE MATCH (V2) ========== */
+.student-app-shell {
+  width: min(430px, calc(100% - 0.9rem));
+  padding: 1rem 0.7rem 6rem;
+  background: #efeeda;
+}
+
+.student-app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.student-app-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: #2f5f56;
+}
+
+.student-app-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 2px solid rgba(47, 95, 86, 0.2);
+  background: #e4e6d3;
+}
+
+.student-app-gear {
+  border: none;
+  background: transparent;
+  color: #42665f;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.student-status-strip {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.7rem;
+  align-items: center;
+  background: #e7e5d5;
+  border-radius: 16px;
+  padding: 0.9rem;
+}
+
+.student-status-strip h3 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.student-status-strip p {
+  margin: 0;
+  color: #3f4b47;
+}
+
+.student-status-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: #d8dfcc;
+  display: grid;
+  place-items: center;
+  color: #315f57;
+  font-size: 1.2rem;
+}
+
+.student-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.student-status-dot.on {
+  background: #2f5f56;
+}
+
+.student-status-dot.off {
+  background: #b3543f;
+}
+
+.student-attendance-hero {
+  background: #f8f8f7;
+  border-radius: 16px;
+  padding: 1.15rem;
+}
+
+.student-attendance-hero h2 {
+  text-align: center;
+  font-size: 2rem;
+  color: #2e5953;
+  text-transform: uppercase;
+}
+
+.student-attendance-hero p {
+  text-align: center;
+  color: #364742;
+}
+
+.student-token-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  position: relative;
+  margin: 1rem 0;
+}
+
+.student-token-box {
+  background: #d9d7c6;
+  border-radius: 10px;
+  min-height: 70px;
+  display: grid;
+  place-items: center;
+  font-size: 1.55rem;
+  color: #5f6678;
+  letter-spacing: 0.07em;
+}
+
+.student-token-hidden-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: text;
+}
+
+.student-submit-btn {
+  background: #476f68;
+  border-radius: 12px;
+  min-height: 58px;
+  font-size: 2rem;
+}
+
+.student-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+}
+
+.student-kpi-card {
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.student-kpi-card.light {
+  background: #dddcc9;
+}
+
+.student-kpi-card.dark {
+  background: #476f68;
+  color: #f2f8f2;
+}
+
+.student-kpi-card strong {
+  font-size: 2.6rem;
+  line-height: 1.05;
+}
+
+.student-kpi-card p {
+  margin: 0.2rem 0 0;
+}
+
+.student-section-headline h2 {
+  font-size: 2.1rem;
+  color: #2f5f56;
+  margin-bottom: 0.8rem;
+}
+
+.student-performance-card {
+  background: #ecead9;
+  border-radius: 14px;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.student-performance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.student-performance-row h3 {
+  margin: 0;
+  font-size: 1.55rem;
+}
+
+.student-performance-row p {
+  margin: 0.1rem 0 0;
+  color: #364742;
+}
+
+.student-performance-chip {
+  padding: 0.32rem 0.8rem;
+  border-radius: 999px;
+  background: #7da39b;
+  color: #173431;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.student-performance-chip.low {
+  background: #e38767;
+  color: #5b1f13;
+}
+
+.student-log-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.student-log-item {
+  background: #f8f8f7;
+  border-radius: 14px;
+  padding: 0.85rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.student-log-date {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #2d3f3a;
+  background: #dddbc9;
+  padding: 0.5rem;
+  border-radius: 10px;
+  min-width: 52px;
+  text-align: center;
+}
+
+.student-log-main h3 {
+  margin: 0;
+  font-size: 1.55rem;
+}
+
+.student-log-main p {
+  margin: 0.12rem 0 0;
+  color: #44514d;
+}
+
+.student-log-status {
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.student-log-status.present {
+  color: #1f5f4f;
+}
+
+.student-log-status.absent {
+  color: #8b2f22;
+}
+
+.student-bottom-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(430px, calc(100% - 0.9rem));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  background: #ecead6;
+  border-top: 1px solid rgba(17, 71, 52, 0.14);
+  padding: 0.6rem;
+  z-index: 55;
+}
+
+.student-bottom-item {
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: #47625b;
+  padding: 0.52rem 0.2rem;
+  cursor: pointer;
+}
+
+.student-bottom-item.active {
+  background: #476f68;
+  color: #f6fbf7;
+}
+
+@media (max-width: 560px) {
+  .student-app-shell {
+    width: min(100% - 0.64rem, 430px);
+    padding: 0.8rem 0.55rem 5.7rem;
+  }
+
+  .student-app-brand {
+    font-size: 1.8rem;
+  }
+
+  .student-attendance-hero h2 {
+    font-size: 1.7rem;
+  }
+
+  .student-log-main h3,
+  .student-performance-row h3 {
+    font-size: 1.25rem;
+  }
+
+  .student-bottom-nav {
+    width: min(100% - 0.64rem, 430px);
+  }
+}
