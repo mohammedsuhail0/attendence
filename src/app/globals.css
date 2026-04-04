@@ -1035,8 +1035,10 @@ tr:last-child td { border-bottom: none; }
 /* ========== STUDENT UI REFERENCE MATCH (V2) ========== */
 .student-app-shell {
   width: min(430px, calc(100% - 0.9rem));
-  padding: 1rem 0.7rem 6rem;
+  padding: 1rem 0.7rem calc(6.3rem + env(safe-area-inset-bottom));
   background: #efeeda;
+  margin: 0 auto;
+  min-height: 100dvh;
 }
 
 .student-app-header {
@@ -1050,9 +1052,10 @@ tr:last-child td { border-bottom: none; }
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 600;
+  font-family: var(--font);
+  font-size: clamp(1.3rem, 6vw, 1.78rem);
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: #2f5f56;
 }
 
@@ -1085,8 +1088,8 @@ tr:last-child td { border-bottom: none; }
 
 .student-status-strip h3 {
   margin: 0;
-  font-size: 1.4rem;
-  font-weight: 600;
+  font-size: clamp(1rem, 4.6vw, 1.2rem);
+  font-weight: 500;
 }
 
 .student-status-strip p {
@@ -1127,10 +1130,9 @@ tr:last-child td { border-bottom: none; }
 
 .student-attendance-hero h2 {
   text-align: center;
-  font-size: 2rem;
-  font-weight: 600;
+  font-size: clamp(1.35rem, 5.9vw, 1.8rem);
+  font-weight: 500;
   color: #2e5953;
-  text-transform: uppercase;
 }
 
 .student-attendance-hero p {
@@ -1168,7 +1170,8 @@ tr:last-child td { border-bottom: none; }
   background: #476f68;
   border-radius: 12px;
   min-height: 58px;
-  font-size: 2rem;
+  font-size: clamp(1.2rem, 5.8vw, 1.5rem);
+  font-weight: 600;
 }
 
 .student-kpi-grid {
@@ -1192,9 +1195,9 @@ tr:last-child td { border-bottom: none; }
 }
 
 .student-kpi-card strong {
-  font-size: 2.6rem;
+  font-size: clamp(1.75rem, 8vw, 2.25rem);
   line-height: 1.05;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .student-kpi-card p {
@@ -1203,10 +1206,10 @@ tr:last-child td { border-bottom: none; }
 }
 
 .student-section-headline h2 {
-  font-size: 2.1rem;
+  font-size: clamp(1.3rem, 5.6vw, 1.62rem);
   color: #2f5f56;
   margin-bottom: 0.8rem;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .student-race-copy {
@@ -1233,8 +1236,8 @@ tr:last-child td { border-bottom: none; }
 
 .student-performance-row h3 {
   margin: 0;
-  font-size: 1.55rem;
-  font-weight: 550;
+  font-size: clamp(1rem, 4.1vw, 1.2rem);
+  font-weight: 500;
 }
 
 .student-performance-row p {
@@ -1247,7 +1250,7 @@ tr:last-child td { border-bottom: none; }
   border-radius: 999px;
   background: #7da39b;
   color: #173431;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.9rem;
 }
 
@@ -1275,7 +1278,7 @@ tr:last-child td { border-bottom: none; }
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-weight: 700;
+  font-weight: 600;
   color: #2d3f3a;
   background: #dddbc9;
   padding: 0.5rem;
@@ -1286,8 +1289,8 @@ tr:last-child td { border-bottom: none; }
 
 .student-log-main h3 {
   margin: 0;
-  font-size: 1.55rem;
-  font-weight: 550;
+  font-size: clamp(1rem, 4.1vw, 1.2rem);
+  font-weight: 500;
 }
 
 .student-log-main p {
@@ -1297,8 +1300,27 @@ tr:last-child td { border-bottom: none; }
 
 .student-log-status {
   font-size: 0.86rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
+}
+
+.leaderboard-rank {
+  font-weight: 650;
+}
+
+.leaderboard-main h3 {
+  font-weight: 500;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.leaderboard-main p {
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.leaderboard-score {
+  font-weight: 650;
 }
 
 .student-log-status.present {
@@ -1312,7 +1334,7 @@ tr:last-child td { border-bottom: none; }
 .student-bottom-nav {
   position: fixed;
   left: 50%;
-  bottom: 0;
+  bottom: max(0px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(430px, calc(100% - 0.9rem));
   display: grid;
@@ -1320,7 +1342,7 @@ tr:last-child td { border-bottom: none; }
   gap: 0.45rem;
   background: #ecead6;
   border-top: 1px solid rgba(17, 71, 52, 0.14);
-  padding: 0.6rem;
+  padding: 0.6rem 0.6rem calc(0.6rem + env(safe-area-inset-bottom));
   z-index: 55;
 }
 
@@ -1330,36 +1352,103 @@ tr:last-child td { border-bottom: none; }
   background: transparent;
   color: #47625b;
   padding: 0.52rem 0.2rem;
-  font-weight: 500;
+  font-weight: 450;
   cursor: pointer;
 }
 
 .student-bottom-item.active {
   background: #476f68;
   color: #f6fbf7;
-  font-weight: 600;
+  font-weight: 550;
 }
 
 @media (max-width: 560px) {
   .student-app-shell {
-    width: min(100% - 0.64rem, 430px);
-    padding: 0.8rem 0.55rem 5.7rem;
+    width: min(100% - 0.45rem, 430px);
+    padding: 0.72rem 0.5rem calc(5.9rem + env(safe-area-inset-bottom));
   }
 
-  .student-app-brand {
-    font-size: 1.8rem;
+  .student-app-shell .card {
+    border-radius: 16px;
+    padding: 0.9rem;
   }
 
-  .student-attendance-hero h2 {
-    font-size: 1.7rem;
+  .student-status-strip {
+    padding: 0.75rem;
   }
 
-  .student-log-main h3,
-  .student-performance-row h3 {
-    font-size: 1.25rem;
+  .student-token-box {
+    min-height: 58px;
+    font-size: 1.3rem;
   }
 
   .student-bottom-nav {
-    width: min(100% - 0.64rem, 430px);
+    width: min(100% - 0.45rem, 430px);
+    gap: 0.35rem;
+  }
+
+  .leaderboard-item {
+    grid-template-columns: auto auto 1fr auto;
+    gap: 0.48rem;
+    padding: 0.58rem;
+  }
+
+  .leaderboard-avatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .leaderboard-main h3 {
+    font-size: 0.93rem;
+  }
+
+  .leaderboard-main p {
+    font-size: 0.78rem;
+  }
+
+  .leaderboard-score {
+    font-size: 0.95rem;
+  }
+
+  .student-bottom-item {
+    font-size: 0.82rem;
+    padding: 0.46rem 0.15rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .student-app-shell {
+    width: calc(100% - 0.28rem);
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+
+  .student-status-strip {
+    grid-template-columns: auto 1fr;
+  }
+
+  .student-status-dot {
+    display: none;
+  }
+
+  .student-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-log-item {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .student-log-status {
+    justify-self: flex-start;
+  }
+
+  .leaderboard-item {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .leaderboard-avatar {
+    display: none;
   }
 }
