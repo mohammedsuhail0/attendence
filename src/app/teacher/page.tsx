@@ -27,7 +27,7 @@ type HistoryPresentStudent = {
   student_id: string;
   full_name: string;
   roll_number: string;
-  mode: 'biometric' | 'manual_override';
+  mode: 'biometric' | 'manual_override' | 'unknown';
 };
 
 function monthLabel(monthValue: string): string {
@@ -300,14 +300,28 @@ export default function TeacherDashboard() {
         (record: {
           student_id: string;
           mark_mode?: string | null;
+          marked_by?: string | null;
           profiles?: { full_name?: string | null; roll_number?: string | null };
         }) => ({
           student_id: record.student_id,
           full_name: record.profiles?.full_name || 'Unknown Student',
           roll_number: record.profiles?.roll_number || '-',
-          mode: record.mark_mode === 'manual_override' ? 'manual_override' : 'biometric',
+          mode:
+            record.mark_mode === 'manual_override'
+              ? 'manual_override'
+              : record.mark_mode === 'biometric'
+                ? 'biometric'
+                : record.marked_by && record.marked_by !== record.student_id
+                  ? 'manual_override'
+                  : 'unknown',
         })
-      );
+      )
+      .sort((left, right) => {
+        const leftRoll = String(left.roll_number || '').trim();
+        const rightRoll = String(right.roll_number || '').trim();
+        if (leftRoll && rightRoll) return leftRoll.localeCompare(rightRoll, undefined, { numeric: true });
+        return left.full_name.localeCompare(right.full_name);
+      });
 
     setHistoryPresentBySession((prev) => ({
       ...prev,
@@ -322,6 +336,16 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     for (const session of filteredHistorySessions) {
+      if ((session.attendance_summary?.present ?? 0) === 0) {
+        if (!Object.prototype.hasOwnProperty.call(historyPresentBySession, session.id)) {
+          setHistoryPresentBySession((prev) => ({
+            ...prev,
+            [session.id]: [],
+          }));
+        }
+        continue;
+      }
+
       const alreadyLoaded = Object.prototype.hasOwnProperty.call(historyPresentBySession, session.id);
       if (alreadyLoaded || historyPresentLoadingBySession[session.id]) continue;
       void loadHistoryPresentStudents(session.id);
@@ -855,7 +879,11 @@ export default function TeacherDashboard() {
                                           <span className="history-student-roll">{student.roll_number}</span>
                                         </div>
                                         <span className={`history-student-mode ${student.mode}`}>
-                                          {student.mode === 'manual_override' ? 'Manual Override' : 'Biometric'}
+                                          {student.mode === 'manual_override'
+                                            ? 'Manual Override'
+                                            : student.mode === 'biometric'
+                                              ? 'Biometric'
+                                              : 'Unknown (Legacy)'}
                                         </span>
                                       </div>
                                     ))}

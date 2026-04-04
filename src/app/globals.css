@@ -352,6 +352,12 @@ tr:last-child td { border-bottom: none; }
   border: 1px solid rgba(196, 154, 70, 0.32);
 }
 
+.history-student-mode.unknown {
+  color: #5e6170;
+  background: rgba(94, 97, 112, 0.12);
+  border: 1px solid rgba(94, 97, 112, 0.22);
+}
+
 /* ========== ALERT ========== */
 .alert {
   padding: 0.75rem 1rem; border-radius: var(--radius-sm);
