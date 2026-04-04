@@ -14,6 +14,13 @@ function getClassYear(cls: Class) {
   return cls.section === 'A' ? '1' : cls.section;
 }
 
+type ManualOverrideStudent = {
+  student_id: string;
+  full_name: string;
+  roll_number: string;
+  attendance_status: 'present' | 'absent' | 'not_marked';
+};
+
 export default function TeacherDashboard() {
   const supabase = createClient();
   const router = useRouter();
@@ -34,6 +41,10 @@ export default function TeacherDashboard() {
   const [attendanceList, setAttendanceList] = useState<
     { status: string; profiles: { full_name: string; roll_number: string } }[]
   >([]);
+  const [manualStudents, setManualStudents] = useState<ManualOverrideStudent[]>([]);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualSubmittingId, setManualSubmittingId] = useState('');
+  const [manualQuery, setManualQuery] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -116,19 +127,70 @@ export default function TeacherDashboard() {
     )
   ).sort((left, right) => left.localeCompare(right));
 
+  const loadAttendanceList = useCallback(async (sessionId: string) => {
+    const res = await fetch(`/api/sessions/${sessionId}/attendance`);
+    const data = await res.json();
+    if (data.records) setAttendanceList(data.records);
+  }, []);
+
+  const loadManualOverrideStudents = useCallback(async (sessionId: string) => {
+    setManualLoading(true);
+    const res = await fetch(`/api/sessions/${sessionId}/manual-override`);
+    const data = await res.json();
+    if (!res.ok) {
+      setManualLoading(false);
+      setError(data.error || 'Failed to load manual override list');
+      return;
+    }
+    setManualStudents((data.students || []) as ManualOverrideStudent[]);
+    setManualLoading(false);
+  }, []);
+
   useEffect(() => {
     if (!activeSession || activeSession.status === 'closed') return;
 
     const poll = async () => {
-      const res = await fetch(`/api/sessions/${activeSession.id}/attendance`);
-      const data = await res.json();
-      if (data.records) setAttendanceList(data.records);
+      await loadAttendanceList(activeSession.id);
     };
 
     poll();
     const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
-  }, [activeSession]);
+  }, [activeSession, loadAttendanceList]);
+
+  useEffect(() => {
+    if (!activeSession || activeSession.status === 'closed') {
+      setManualStudents([]);
+      return;
+    }
+
+    loadManualOverrideStudents(activeSession.id);
+  }, [activeSession, loadManualOverrideStudents]);
+
+  async function markManualPresent(studentId: string) {
+    if (!activeSession) return;
+    setError('');
+    setSuccess('');
+    setManualSubmittingId(studentId);
+
+    const res = await fetch(`/api/sessions/${activeSession.id}/manual-override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: studentId }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      setManualSubmittingId('');
+      setError(data.error || 'Failed to mark attendance via manual override');
+      return;
+    }
+
+    setSuccess('Manual override marked successfully.');
+    await loadManualOverrideStudents(activeSession.id);
+    await loadAttendanceList(activeSession.id);
+    setManualSubmittingId('');
+  }
 
   async function createSession(e: React.FormEvent) {
     e.preventDefault();
@@ -195,12 +257,23 @@ export default function TeacherDashboard() {
       setActiveSession(null);
       setToken('');
       setTimeLeft(0);
+      setManualStudents([]);
+      setManualQuery('');
       setSuccess(`Session closed. Present: ${data.present}, Absent: ${data.absent}`);
       const res2 = await fetch('/api/sessions');
       const d2 = await res2.json();
       if (d2.sessions) setSessions(d2.sessions);
     }
   }
+
+  const filteredManualStudents = manualStudents.filter((student) => {
+    const q = manualQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      student.full_name.toLowerCase().includes(q) ||
+      String(student.roll_number || '').toLowerCase().includes(q)
+    );
+  });
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -279,6 +352,61 @@ export default function TeacherDashboard() {
               </div>
             </div>
           )}
+
+          <div className="teacher-manual-card mt-3">
+            <div className="teacher-manual-head">
+              <h3>Manual Override</h3>
+              <button
+                className="btn btn-outline btn-sm"
+                type="button"
+                onClick={() => activeSession && loadManualOverrideStudents(activeSession.id)}
+                disabled={manualLoading}
+              >
+                {manualLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+
+            <div className="form-group mt-1">
+              <label htmlFor="manual-search">Find student (name or roll no)</label>
+              <input
+                id="manual-search"
+                type="text"
+                className="form-input"
+                value={manualQuery}
+                onChange={(e) => setManualQuery(e.target.value)}
+                placeholder="Search by name or roll number"
+              />
+            </div>
+
+            {filteredManualStudents.length === 0 ? (
+              <p className="text-dim text-sm">No students found for manual override.</p>
+            ) : (
+              <div className="teacher-manual-list">
+                {filteredManualStudents.map((student) => {
+                  const alreadyPresent = student.attendance_status === 'present';
+                  return (
+                    <article className="teacher-manual-item" key={student.student_id}>
+                      <div className="teacher-manual-meta">
+                        <h4>{student.full_name}</h4>
+                        <p>{student.roll_number || 'No roll number'}</p>
+                      </div>
+                      <span className={`badge badge-${alreadyPresent ? 'present' : 'closed'}`}>
+                        {alreadyPresent ? 'present' : 'not marked'}
+                      </span>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        type="button"
+                        disabled={alreadyPresent || manualSubmittingId === student.student_id}
+                        onClick={() => markManualPresent(student.student_id)}
+                      >
+                        {manualSubmittingId === student.student_id ? 'Saving...' : alreadyPresent ? 'Marked' : 'Mark Present'}
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -1545,6 +1545,59 @@ tr:last-child td { border-bottom: none; }
   letter-spacing: 0.01em;
 }
 
+.teacher-manual-card {
+  border: 1px solid rgba(17, 71, 52, 0.12);
+  border-radius: 14px;
+  background: #f6f5ee;
+  padding: 0.82rem;
+}
+
+.teacher-manual-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.3rem;
+}
+
+.teacher-manual-head h3 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 550;
+  color: #2f5f56;
+}
+
+.teacher-manual-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.teacher-manual-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.55rem;
+  align-items: center;
+  border: 1px solid rgba(17, 71, 52, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.58rem;
+}
+
+.teacher-manual-meta h4 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 550;
+  color: #2b4f48;
+}
+
+.teacher-manual-meta p {
+  margin: 0.08rem 0 0;
+  color: #60716c;
+  font-size: 0.82rem;
+}
+
 @media (max-width: 560px) {
   .teacher-app-shell {
     width: min(100% - 0.45rem, 480px);
@@ -1575,6 +1628,15 @@ tr:last-child td { border-bottom: none; }
 
   .teacher-app-shell table {
     min-width: 470px;
+  }
+
+  .teacher-manual-item {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-manual-item .badge,
+  .teacher-manual-item .btn {
+    justify-self: flex-start;
   }
 }
 
