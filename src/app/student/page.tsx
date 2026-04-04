@@ -321,6 +321,7 @@ export default function StudentDashboard() {
 
       <header className="student-hero">
         <h1>Subject-wise Attendance</h1>
+        <p className="student-semester">Semester II • Spring 2024</p>
         <p className="student-subtitle">
           {profile?.full_name} {profile?.roll_number ? `• ${profile.roll_number}` : ''}
         </p>
@@ -332,21 +333,24 @@ export default function StudentDashboard() {
           onClick={() => setActiveTab('subjects')}
           type="button"
         >
-          Subjects
+          <span className="student-tab-icon">SUB</span>
+          <span className="student-tab-label">Subjects</span>
         </button>
         <button
           className={`student-tab ${activeTab === 'leaderboard' ? 'student-tab-active' : ''}`}
           onClick={() => setActiveTab('leaderboard')}
           type="button"
         >
-          Leaderboard
+          <span className="student-tab-icon">RANK</span>
+          <span className="student-tab-label">Leaderboard</span>
         </button>
         <button
           className={`student-tab ${activeTab === 'profile' ? 'student-tab-active' : ''}`}
           onClick={() => setActiveTab('profile')}
           type="button"
         >
-          Profile
+          <span className="student-tab-icon">ME</span>
+          <span className="student-tab-label">Profile</span>
         </button>
       </div>
 
