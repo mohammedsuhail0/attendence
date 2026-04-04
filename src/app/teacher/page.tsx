@@ -316,7 +316,7 @@ export default function TeacherDashboard() {
                   : 'unknown',
         })
       )
-      .sort((left, right) => {
+      .sort((left: HistoryPresentStudent, right: HistoryPresentStudent) => {
         const leftRoll = String(left.roll_number || '').trim();
         const rightRoll = String(right.roll_number || '').trim();
         if (leftRoll && rightRoll) return leftRoll.localeCompare(rightRoll, undefined, { numeric: true });
