@@ -10,6 +10,16 @@ function isProfileRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isDirectImageSource(value: string | null): value is string {
+  if (!value) return false;
+  return (
+    value.startsWith('http://') ||
+    value.startsWith('https://') ||
+    value.startsWith('data:image/') ||
+    value.startsWith('blob:')
+  );
+}
+
 async function getOwnedSession(sessionId: string, teacherId: string) {
   const admin = createAdminClient();
   const { data: session } = await admin
@@ -98,10 +108,15 @@ export async function GET(
           typeof profile.photo_path === 'string'
             ? profile.photo_path
             : null;
+
+        if (isDirectImageSource(photoPath)) {
+          photo_url = photoPath;
+        }
+
         const canonicalPhotoPath = rollNumber ? `${PHOTO_PREFIX}/${rollNumber}.png` : null;
         const candidatePhotoPaths = [canonicalPhotoPath, photoPath].filter(
           (value, index, arr): value is string =>
-            Boolean(value) && arr.indexOf(value) === index
+            Boolean(value) && !isDirectImageSource(value) && arr.indexOf(value) === index
         );
 
         for (const candidatePath of candidatePhotoPaths) {

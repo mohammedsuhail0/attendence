@@ -2,6 +2,46 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
+const PHOTO_BUCKET = 'student-photos';
+const PHOTO_PREFIX = 'it24';
+
+function isDirectImageSource(value: string | null): value is string {
+  if (!value) return false;
+  return (
+    value.startsWith('http://') ||
+    value.startsWith('https://') ||
+    value.startsWith('data:image/') ||
+    value.startsWith('blob:')
+  );
+}
+
+async function resolvePhotoUrl(
+  admin: ReturnType<typeof createAdminClient>,
+  photoPath: string | null,
+  rollNumber: string | null
+): Promise<string | null> {
+  if (isDirectImageSource(photoPath)) {
+    return photoPath;
+  }
+
+  const canonicalPhotoPath = rollNumber ? `${PHOTO_PREFIX}/${rollNumber}.png` : null;
+  const candidatePhotoPaths = [photoPath, canonicalPhotoPath].filter(
+    (value, index, arr): value is string => Boolean(value) && arr.indexOf(value) === index
+  );
+
+  for (const candidatePath of candidatePhotoPaths) {
+    const { data: signedUrlData, error: signedUrlError } = await admin.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrl(candidatePath, 60 * 60);
+
+    if (!signedUrlError && signedUrlData?.signedUrl) {
+      return signedUrlData.signedUrl;
+    }
+  }
+
+  return null;
+}
+
 type StudentRow = {
   id: string;
   full_name: string;
@@ -67,7 +107,7 @@ export async function GET() {
       statsByStudentId.set(record.student_id, existing);
     }
 
-    const leaderboard = ((students || []) as StudentRow[])
+    const leaderboardBase = ((students || []) as StudentRow[])
       .map((student) => {
         const stats = statsByStudentId.get(student.id) || { total: 0, present: 0 };
         const percentage = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
@@ -87,6 +127,13 @@ export async function GET() {
         if (right.present !== left.present) return right.present - left.present;
         return left.full_name.localeCompare(right.full_name);
       });
+
+    const leaderboard = await Promise.all(
+      leaderboardBase.map(async (entry) => ({
+        ...entry,
+        photo_path: await resolvePhotoUrl(admin, entry.photo_path, entry.roll_number),
+      }))
+    );
 
     return NextResponse.json({ leaderboard, metric: 'attendance_percentage' });
   } catch {

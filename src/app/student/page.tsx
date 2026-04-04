@@ -77,6 +77,7 @@ export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'history' | 'profile'>('dashboard');
   const [profileImage, setProfileImage] = useState<string>(DEFAULT_AVATARS[0]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [imageFallbacks, setImageFallbacks] = useState<Record<string, boolean>>({});
 
   async function loadLeaderboard() {
     setLeaderboardLoading(true);
@@ -293,11 +294,32 @@ export default function StudentDashboard() {
     router.refresh();
   }
 
-  function saveProfileImage(imageUrl: string) {
+  async function saveProfileImage(imageUrl: string) {
     setProfileImage(imageUrl);
+    setProfile((prev) => (prev ? { ...prev, photo_path: imageUrl } : prev));
+    setLeaderboard((prev) =>
+      prev.map((entry) =>
+        entry.student_id === currentUserId
+          ? { ...entry, photo_path: imageUrl }
+          : entry
+      )
+    );
+
     if (currentUserId) {
       window.localStorage.setItem(`student-avatar-${currentUserId}`, imageUrl);
     }
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ photo_path: imageUrl })
+      .eq('id', currentUserId);
+
+    if (updateError) {
+      setError('Profile image changed locally, but sync failed. Please try again.');
+      return;
+    }
+
+    await loadLeaderboard();
     setSuccess('Profile image updated.');
     setError('');
   }
@@ -318,7 +340,7 @@ export default function StudentDashboard() {
         setError('Unable to read selected image.');
         return;
       }
-      saveProfileImage(value);
+      void saveProfileImage(value);
     };
     reader.onerror = () => {
       setError('Unable to read selected image.');
@@ -465,13 +487,27 @@ export default function StudentDashboard() {
                 <article key={entry.student_id} className="leaderboard-item">
                   <div className="leaderboard-rank">#{index + 1}</div>
                   <img
-                    src={entry.photo_path || DEFAULT_AVATARS[index % DEFAULT_AVATARS.length]}
+                    src={
+                      imageFallbacks[entry.student_id]
+                        ? DEFAULT_AVATARS[index % DEFAULT_AVATARS.length]
+                        : entry.student_id === currentUserId
+                          ? profileImage
+                          : entry.photo_path || DEFAULT_AVATARS[index % DEFAULT_AVATARS.length]
+                    }
                     alt={entry.full_name}
                     className="leaderboard-avatar"
+                    onError={() =>
+                      setImageFallbacks((prev) => ({
+                        ...prev,
+                        [entry.student_id]: true,
+                      }))
+                    }
                   />
                   <div className="leaderboard-main">
                     <h3>{entry.full_name}</h3>
-                    <p className="text-dim text-sm">{entry.roll_number || 'No roll'} • {entry.present}/{entry.total} classes</p>
+                    <p className="text-dim text-sm">
+                      {entry.roll_number || 'No roll'} • Attendance: {entry.percentage}% of total ({entry.present}/{entry.total})
+                    </p>
                   </div>
                   <div className={`leaderboard-score ${entry.percentage < 75 ? 'low' : ''}`}>{entry.percentage}%</div>
                 </article>
@@ -527,7 +563,7 @@ export default function StudentDashboard() {
                 key={avatar}
                 type="button"
                 className={`student-avatar-option ${profileImage === avatar ? 'active' : ''}`}
-                onClick={() => saveProfileImage(avatar)}
+                onClick={() => void saveProfileImage(avatar)}
               >
                 <img src={avatar} alt="Avatar option" />
               </button>
