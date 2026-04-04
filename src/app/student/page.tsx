@@ -77,7 +77,6 @@ export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'history' | 'profile'>('dashboard');
   const [profileImage, setProfileImage] = useState<string>(DEFAULT_AVATARS[0]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [imageFallbacks, setImageFallbacks] = useState<Record<string, boolean>>({});
 
   async function loadLeaderboard() {
     setLeaderboardLoading(true);
@@ -486,28 +485,9 @@ export default function StudentDashboard() {
               {leaderboard.map((entry, index) => (
                 <article key={entry.student_id} className="leaderboard-item">
                   <div className="leaderboard-rank">#{index + 1}</div>
-                  <img
-                    src={
-                      imageFallbacks[entry.student_id]
-                        ? DEFAULT_AVATARS[index % DEFAULT_AVATARS.length]
-                        : entry.student_id === currentUserId
-                          ? profileImage
-                          : entry.photo_path || DEFAULT_AVATARS[index % DEFAULT_AVATARS.length]
-                    }
-                    alt={entry.full_name}
-                    className="leaderboard-avatar"
-                    onError={() =>
-                      setImageFallbacks((prev) => ({
-                        ...prev,
-                        [entry.student_id]: true,
-                      }))
-                    }
-                  />
                   <div className="leaderboard-main">
                     <h3>{entry.full_name}</h3>
-                    <p className="text-dim text-sm">
-                      {entry.roll_number || 'No roll'} • Attendance: {entry.percentage}% of total ({entry.present}/{entry.total})
-                    </p>
+                    <p className="text-dim text-sm">{entry.roll_number || 'No roll number'}</p>
                   </div>
                   <div className={`leaderboard-score ${entry.percentage < 75 ? 'low' : ''}`}>{entry.percentage}%</div>
                 </article>

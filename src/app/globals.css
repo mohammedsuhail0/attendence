@@ -819,7 +819,7 @@ tr:last-child td { border-bottom: none; }
 
 .leaderboard-item {
   display: grid;
-  grid-template-columns: auto auto 1fr auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.62rem;
   padding: 0.68rem;
@@ -1388,14 +1388,9 @@ tr:last-child td { border-bottom: none; }
   }
 
   .leaderboard-item {
-    grid-template-columns: auto auto 1fr auto;
+    grid-template-columns: auto 1fr auto;
     gap: 0.48rem;
     padding: 0.58rem;
-  }
-
-  .leaderboard-avatar {
-    width: 34px;
-    height: 34px;
   }
 
   .leaderboard-main h3 {
@@ -1446,9 +1441,5 @@ tr:last-child td { border-bottom: none; }
 
   .leaderboard-item {
     grid-template-columns: auto 1fr auto;
-  }
-
-  .leaderboard-avatar {
-    display: none;
   }
 }
