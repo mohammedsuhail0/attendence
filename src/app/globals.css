@@ -679,13 +679,21 @@ tr:last-child td { border-bottom: none; }
 
 .student-actions-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 0.72fr 1.28fr;
   gap: 0.75rem;
   margin-top: 0.8rem;
 }
 
 .action-card h2 {
   font-size: 1.25rem;
+}
+
+.action-card-biometric {
+  min-height: 188px;
+}
+
+.action-card-attendance {
+  min-height: 188px;
 }
 
 .student-token-input {
@@ -910,10 +918,6 @@ tr:last-child td { border-bottom: none; }
 }
 
 @media (max-width: 820px) {
-  .student-actions-grid {
-    grid-template-columns: 1fr;
-  }
-
   .subject-item h3 {
     max-width: 100%;
     margin-top: 0.35rem;
@@ -942,6 +946,19 @@ tr:last-child td { border-bottom: none; }
   .student-summary-grid {
     grid-template-columns: 1.12fr 0.88fr;
     gap: 0.58rem;
+  }
+
+  .student-actions-grid {
+    grid-template-columns: 0.66fr 1.34fr;
+    gap: 0.58rem;
+  }
+
+  .action-card {
+    padding: 0.92rem;
+  }
+
+  .action-card h2 {
+    font-size: 1.12rem;
   }
 
   .summary-value {

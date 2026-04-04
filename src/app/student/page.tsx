@@ -376,7 +376,7 @@ export default function StudentDashboard() {
       </section>
 
       <div className="student-actions-grid">
-        <div className="card action-card">
+        <div className="card action-card action-card-biometric">
           <h2>Biometric Setup</h2>
           {hasBiometric ? (
             <p className="text-dim text-sm mt-1">Biometric is active on this account.</p>
@@ -403,7 +403,7 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        <div className="card action-card">
+        <div className="card action-card action-card-attendance">
           <h2>Mark Attendance</h2>
           <form onSubmit={submitAttendance} className="mt-2">
             <div className="form-group">
