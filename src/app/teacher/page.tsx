@@ -18,6 +18,8 @@ type ManualOverrideStudent = {
   student_id: string;
   full_name: string;
   roll_number: string;
+  photo_url?: string | null;
+  photo_path?: string | null;
   attendance_status: 'present' | 'absent' | 'not_marked';
 };
 
@@ -45,6 +47,7 @@ export default function TeacherDashboard() {
   const [manualLoading, setManualLoading] = useState(false);
   const [manualSubmittingId, setManualSubmittingId] = useState('');
   const [manualQuery, setManualQuery] = useState('');
+  const [manualImageFallbacks, setManualImageFallbacks] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -275,6 +278,19 @@ export default function TeacherDashboard() {
     );
   });
 
+  function getManualAvatar(student: ManualOverrideStudent): string {
+    if (!manualImageFallbacks[student.student_id] && student.photo_url) {
+      return student.photo_url;
+    }
+
+    if (!manualImageFallbacks[student.student_id] && student.photo_path) {
+      return student.photo_path;
+    }
+
+    const seed = encodeURIComponent(student.roll_number || student.full_name || student.student_id);
+    return `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`;
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/login');
@@ -386,6 +402,17 @@ export default function TeacherDashboard() {
                   const alreadyPresent = student.attendance_status === 'present';
                   return (
                     <article className="teacher-manual-item" key={student.student_id}>
+                      <img
+                        src={getManualAvatar(student)}
+                        alt={student.full_name}
+                        className="teacher-manual-avatar"
+                        onError={() =>
+                          setManualImageFallbacks((prev) => ({
+                            ...prev,
+                            [student.student_id]: true,
+                          }))
+                        }
+                      />
                       <div className="teacher-manual-meta">
                         <h4>{student.full_name}</h4>
                         <p>{student.roll_number || 'No roll number'}</p>

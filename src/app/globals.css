@@ -1575,13 +1575,22 @@ tr:last-child td { border-bottom: none; }
 
 .teacher-manual-item {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto auto;
   gap: 0.55rem;
   align-items: center;
   border: 1px solid rgba(17, 71, 52, 0.12);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.72);
   padding: 0.58rem;
+}
+
+.teacher-manual-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(17, 71, 52, 0.18);
+  background: #e3e7d8;
 }
 
 .teacher-manual-meta h4 {
@@ -1631,12 +1640,24 @@ tr:last-child td { border-bottom: none; }
   }
 
   .teacher-manual-item {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+  }
+
+  .teacher-manual-avatar {
+    width: 36px;
+    height: 36px;
+    margin-top: 0.1rem;
+  }
+
+  .teacher-manual-item .teacher-manual-meta {
+    grid-column: 2;
   }
 
   .teacher-manual-item .badge,
   .teacher-manual-item .btn {
     justify-self: flex-start;
+    grid-column: 2;
   }
 }
 
