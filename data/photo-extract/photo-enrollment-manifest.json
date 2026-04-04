@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-02T11:14:53.268Z",
+  "generated_at": "2026-04-02T19:57:41.264Z",
   "total_students_in_csv": 89,
   "mapped_students_count": 88,
   "face_images_count": 88,
@@ -520,10 +520,10 @@
       "department": "IT",
       "section": "A",
       "email": "160524737045@islec.demo",
-      "source_face_file": "student_045.png",
-      "mapped_face_file": "160524737045.png",
-      "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737045.png",
-      "status": "mapped"
+      "source_face_file": "",
+      "mapped_face_file": "",
+      "mapped_face_path": "",
+      "status": "missing_photo"
     },
     {
       "roll_number": "160524737046",
@@ -532,7 +532,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737046@islec.demo",
-      "source_face_file": "student_047.png",
+      "source_face_file": "student_045.png",
       "mapped_face_file": "160524737046.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737046.png",
       "status": "mapped"
@@ -556,7 +556,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737048@islec.demo",
-      "source_face_file": "student_048.png",
+      "source_face_file": "student_047.png",
       "mapped_face_file": "160524737048.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737048.png",
       "status": "mapped"
@@ -568,7 +568,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737049@islec.demo",
-      "source_face_file": "student_049.png",
+      "source_face_file": "student_048.png",
       "mapped_face_file": "160524737049.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737049.png",
       "status": "mapped"
@@ -580,7 +580,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737050@islec.demo",
-      "source_face_file": "student_050.png",
+      "source_face_file": "student_049.png",
       "mapped_face_file": "160524737050.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737050.png",
       "status": "mapped"
@@ -592,7 +592,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737051@islec.demo",
-      "source_face_file": "student_051.png",
+      "source_face_file": "student_050.png",
       "mapped_face_file": "160524737051.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737051.png",
       "status": "mapped"
@@ -604,7 +604,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737052@islec.demo",
-      "source_face_file": "student_052.png",
+      "source_face_file": "student_051.png",
       "mapped_face_file": "160524737052.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737052.png",
       "status": "mapped"
@@ -616,7 +616,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737053@islec.demo",
-      "source_face_file": "student_053.png",
+      "source_face_file": "student_052.png",
       "mapped_face_file": "160524737053.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737053.png",
       "status": "mapped"
@@ -628,7 +628,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737054@islec.demo",
-      "source_face_file": "student_054.png",
+      "source_face_file": "student_053.png",
       "mapped_face_file": "160524737054.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737054.png",
       "status": "mapped"
@@ -640,7 +640,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737055@islec.demo",
-      "source_face_file": "student_055.png",
+      "source_face_file": "student_054.png",
       "mapped_face_file": "160524737055.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737055.png",
       "status": "mapped"
@@ -652,7 +652,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737056@islec.demo",
-      "source_face_file": "student_056.png",
+      "source_face_file": "student_055.png",
       "mapped_face_file": "160524737056.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737056.png",
       "status": "mapped"
@@ -664,7 +664,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737057@islec.demo",
-      "source_face_file": "student_057.png",
+      "source_face_file": "student_056.png",
       "mapped_face_file": "160524737057.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737057.png",
       "status": "mapped"
@@ -676,7 +676,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737058@islec.demo",
-      "source_face_file": "student_058.png",
+      "source_face_file": "student_057.png",
       "mapped_face_file": "160524737058.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737058.png",
       "status": "mapped"
@@ -688,7 +688,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737059@islec.demo",
-      "source_face_file": "student_059.png",
+      "source_face_file": "student_058.png",
       "mapped_face_file": "160524737059.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737059.png",
       "status": "mapped"
@@ -700,7 +700,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737060@islec.demo",
-      "source_face_file": "student_060.png",
+      "source_face_file": "student_059.png",
       "mapped_face_file": "160524737060.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737060.png",
       "status": "mapped"
@@ -712,7 +712,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737061@islec.demo",
-      "source_face_file": "student_061.png",
+      "source_face_file": "student_060.png",
       "mapped_face_file": "160524737061.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737061.png",
       "status": "mapped"
@@ -724,7 +724,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737062@islec.demo",
-      "source_face_file": "student_062.png",
+      "source_face_file": "student_061.png",
       "mapped_face_file": "160524737062.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737062.png",
       "status": "mapped"
@@ -736,7 +736,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737063@islec.demo",
-      "source_face_file": "student_063.png",
+      "source_face_file": "student_062.png",
       "mapped_face_file": "160524737063.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737063.png",
       "status": "mapped"
@@ -748,7 +748,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737064@islec.demo",
-      "source_face_file": "student_064.png",
+      "source_face_file": "student_063.png",
       "mapped_face_file": "160524737064.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737064.png",
       "status": "mapped"
@@ -760,7 +760,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737065@islec.demo",
-      "source_face_file": "student_065.png",
+      "source_face_file": "student_064.png",
       "mapped_face_file": "160524737065.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737065.png",
       "status": "mapped"
@@ -772,7 +772,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737066@islec.demo",
-      "source_face_file": "student_066.png",
+      "source_face_file": "student_065.png",
       "mapped_face_file": "160524737066.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737066.png",
       "status": "mapped"
@@ -784,7 +784,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737067@islec.demo",
-      "source_face_file": "student_067.png",
+      "source_face_file": "student_066.png",
       "mapped_face_file": "160524737067.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737067.png",
       "status": "mapped"
@@ -796,7 +796,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737068@islec.demo",
-      "source_face_file": "student_068.png",
+      "source_face_file": "student_067.png",
       "mapped_face_file": "160524737068.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737068.png",
       "status": "mapped"
@@ -808,7 +808,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737069@islec.demo",
-      "source_face_file": "student_069.png",
+      "source_face_file": "student_068.png",
       "mapped_face_file": "160524737069.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737069.png",
       "status": "mapped"
@@ -820,7 +820,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737070@islec.demo",
-      "source_face_file": "student_070.png",
+      "source_face_file": "student_069.png",
       "mapped_face_file": "160524737070.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737070.png",
       "status": "mapped"
@@ -832,7 +832,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737071@islec.demo",
-      "source_face_file": "student_071.png",
+      "source_face_file": "student_070.png",
       "mapped_face_file": "160524737071.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737071.png",
       "status": "mapped"
@@ -844,7 +844,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737072@islec.demo",
-      "source_face_file": "student_072.png",
+      "source_face_file": "student_071.png",
       "mapped_face_file": "160524737072.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737072.png",
       "status": "mapped"
@@ -856,7 +856,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737073@islec.demo",
-      "source_face_file": "student_073.png",
+      "source_face_file": "student_072.png",
       "mapped_face_file": "160524737073.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737073.png",
       "status": "mapped"
@@ -868,7 +868,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737074@islec.demo",
-      "source_face_file": "student_074.png",
+      "source_face_file": "student_073.png",
       "mapped_face_file": "160524737074.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737074.png",
       "status": "mapped"
@@ -880,7 +880,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737075@islec.demo",
-      "source_face_file": "student_075.png",
+      "source_face_file": "student_074.png",
       "mapped_face_file": "160524737075.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737075.png",
       "status": "mapped"
@@ -892,7 +892,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737076@islec.demo",
-      "source_face_file": "student_076.png",
+      "source_face_file": "student_075.png",
       "mapped_face_file": "160524737076.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737076.png",
       "status": "mapped"
@@ -904,7 +904,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737077@islec.demo",
-      "source_face_file": "student_077.png",
+      "source_face_file": "student_076.png",
       "mapped_face_file": "160524737077.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737077.png",
       "status": "mapped"
@@ -916,7 +916,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737078@islec.demo",
-      "source_face_file": "student_078.png",
+      "source_face_file": "student_077.png",
       "mapped_face_file": "160524737078.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737078.png",
       "status": "mapped"
@@ -928,7 +928,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737080@islec.demo",
-      "source_face_file": "student_080.png",
+      "source_face_file": "student_079.png",
       "mapped_face_file": "160524737080.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737080.png",
       "status": "mapped"
@@ -940,7 +940,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737081@islec.demo",
-      "source_face_file": "student_081.png",
+      "source_face_file": "student_080.png",
       "mapped_face_file": "160524737081.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737081.png",
       "status": "mapped"
@@ -952,7 +952,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737082@islec.demo",
-      "source_face_file": "student_082.png",
+      "source_face_file": "student_081.png",
       "mapped_face_file": "160524737082.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737082.png",
       "status": "mapped"
@@ -964,7 +964,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737083@islec.demo",
-      "source_face_file": "student_083.png",
+      "source_face_file": "student_082.png",
       "mapped_face_file": "160524737083.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737083.png",
       "status": "mapped"
@@ -976,7 +976,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737084@islec.demo",
-      "source_face_file": "student_084.png",
+      "source_face_file": "student_083.png",
       "mapped_face_file": "160524737084.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737084.png",
       "status": "mapped"
@@ -988,7 +988,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737085@islec.demo",
-      "source_face_file": "student_085.png",
+      "source_face_file": "student_084.png",
       "mapped_face_file": "160524737085.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737085.png",
       "status": "mapped"
@@ -1000,7 +1000,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737086@islec.demo",
-      "source_face_file": "student_086.png",
+      "source_face_file": "student_085.png",
       "mapped_face_file": "160524737086.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737086.png",
       "status": "mapped"
@@ -1012,7 +1012,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737087@islec.demo",
-      "source_face_file": "student_087.png",
+      "source_face_file": "student_086.png",
       "mapped_face_file": "160524737087.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737087.png",
       "status": "mapped"
@@ -1024,7 +1024,7 @@
       "department": "IT",
       "section": "A",
       "email": "160524737088@islec.demo",
-      "source_face_file": "student_088.png",
+      "source_face_file": "student_087.png",
       "mapped_face_file": "160524737088.png",
       "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737088.png",
       "status": "mapped"
@@ -1036,10 +1036,10 @@
       "department": "IT",
       "section": "A",
       "email": "160524737089@islec.demo",
-      "source_face_file": "",
-      "mapped_face_file": "",
-      "mapped_face_path": "",
-      "status": "missing_photo"
+      "source_face_file": "student_088.png",
+      "mapped_face_file": "160524737089.png",
+      "mapped_face_path": "data/photo-extract/mapped/by_roll/160524737089.png",
+      "status": "mapped"
     },
     {
       "roll_number": "160524737301",
@@ -1096,7 +1096,7 @@
       "department": "",
       "section": "",
       "email": "",
-      "source_face_file": "student_079.png",
+      "source_face_file": "student_078.png",
       "mapped_face_file": "",
       "mapped_face_path": "",
       "status": "unassigned_face"
