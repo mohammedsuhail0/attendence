@@ -91,7 +91,7 @@ export default function StudentDashboard() {
   async function loadLeaderboard() {
     setLeaderboardLoading(true);
     try {
-      const res = await fetch('/api/attendance/leaderboard');
+      const res = await fetch('/api/attendance/leaderboard', { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load leaderboard');
       setLeaderboard(data.leaderboard || []);
@@ -257,6 +257,8 @@ export default function StudentDashboard() {
       const res2 = await fetch('/api/attendance/history');
       const d2 = await res2.json();
       if (d2.records) setRecords(d2.records);
+
+      await loadLeaderboard();
     } catch (e: unknown) {
       setError(toErrorMessage(e, 'Failed to submit attendance.'));
     } finally {

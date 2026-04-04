@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
+export const dynamic = 'force-dynamic';
+
 const PHOTO_BUCKET = 'student-photos';
 const PHOTO_PREFIX = 'it24';
 
@@ -135,8 +137,14 @@ export async function GET() {
       }))
     );
 
-    return NextResponse.json({ leaderboard, metric: 'attendance_percentage' });
+    return NextResponse.json(
+      { leaderboard, metric: 'attendance_percentage' },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    );
   } catch {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500, headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    );
   }
 }
