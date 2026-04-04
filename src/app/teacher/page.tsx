@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { Class, AttendanceSession } from '@/types/database';
-import { getDateStringInTimeZone } from '@/lib/utils';
+import { formatDisplayDate, getDateStringInTimeZone } from '@/lib/utils';
 
 const DEPARTMENT_OPTIONS = ['IT', 'CSE', 'AIDS', 'Civil', 'Mech'] as const;
 const YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
@@ -416,7 +416,7 @@ export default function TeacherDashboard() {
               <tbody>
                 {sessions.map((session) => (
                   <tr key={session.id}>
-                    <td>{session.session_date}</td>
+                    <td>{formatDisplayDate(session.session_date)}</td>
                     <td>{session.classes?.subject || '-'}</td>
                     <td>P{session.period}</td>
                     <td>

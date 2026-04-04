@@ -59,4 +59,14 @@ export function getDateStringInTimeZone(
   return `${year}-${month}-${day}`;
 }
 
+export function formatDisplayDate(dateValue: string): string {
+  const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return dateValue;
+  }
+
+  const [, year, month, day] = match;
+  return `${day}-${month}-${year.slice(-2)}`;
+}
+
 export const TOKEN_VALIDITY_SECONDS = 25;

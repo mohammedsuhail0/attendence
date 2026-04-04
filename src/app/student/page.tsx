@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   browserSupportsWebAuthn,
   platformAuthenticatorIsAvailable,
@@ -9,6 +9,7 @@ import {
 } from '@simplewebauthn/browser';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { formatDisplayDate } from '@/lib/utils';
 
 interface AttendanceRecord {
   id: string;
@@ -268,6 +269,24 @@ export default function StudentDashboard() {
     subjectMap.set(subject, entry);
   }
 
+  const sortedHistoryRecords = useMemo(() => {
+    const copy = [...records];
+    copy.sort((left, right) => {
+      const leftSubject = left.attendance_sessions?.classes?.subject || '';
+      const rightSubject = right.attendance_sessions?.classes?.subject || '';
+      const subjectCompare = leftSubject.localeCompare(rightSubject);
+      if (subjectCompare !== 0) return subjectCompare;
+
+      const leftDate = left.attendance_sessions?.session_date || '';
+      const rightDate = right.attendance_sessions?.session_date || '';
+      const dateCompare = rightDate.localeCompare(leftDate);
+      if (dateCompare !== 0) return dateCompare;
+
+      return (left.attendance_sessions?.period || 0) - (right.attendance_sessions?.period || 0);
+    });
+    return copy;
+  }, [records]);
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/login');
@@ -414,7 +433,7 @@ export default function StudentDashboard() {
             <div className="student-log-list">
               {records.slice(0, 3).map((record) => (
                 <article key={record.id} className="student-log-item">
-                  <div className="student-log-date">{record.attendance_sessions?.session_date || '-'}</div>
+                  <div className="student-log-date">{formatDisplayDate(record.attendance_sessions?.session_date || '-')}</div>
                   <div className="student-log-main">
                     <h3>{record.attendance_sessions?.classes?.subject || '-'}</h3>
                     <p>Period {record.attendance_sessions?.period || '-'}</p>
@@ -479,9 +498,9 @@ export default function StudentDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((r) => (
+                  {sortedHistoryRecords.map((r) => (
                     <tr key={r.id}>
-                      <td>{r.attendance_sessions?.session_date || '-'}</td>
+                      <td>{formatDisplayDate(r.attendance_sessions?.session_date || '-')}</td>
                       <td>{r.attendance_sessions?.classes?.subject || '-'}</td>
                       <td>P{r.attendance_sessions?.period}</td>
                       <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>

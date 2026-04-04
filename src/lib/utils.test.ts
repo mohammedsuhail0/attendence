@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatDisplayDate,
   generateToken,
   getDateStringInTimeZone,
   isTokenExpired,
@@ -29,5 +30,13 @@ describe('utils', () => {
   it('formats dates in the configured time zone', () => {
     const date = new Date('2026-03-27T20:30:00Z');
     expect(getDateStringInTimeZone(date, 'Asia/Kolkata')).toBe('2026-03-28');
+  });
+
+  it('formats display date as dd-mm-yy', () => {
+    expect(formatDisplayDate('2026-04-04')).toBe('04-04-26');
+  });
+
+  it('returns original value when date format is invalid', () => {
+    expect(formatDisplayDate('04/04/2026')).toBe('04/04/2026');
   });
 });
