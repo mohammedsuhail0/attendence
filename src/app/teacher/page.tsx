@@ -30,8 +30,9 @@ type ManualStudent = {
   attendance_status: 'present' | 'absent' | 'not_marked';
 };
 
+const supabase = createClient();
+
 export default function TeacherDashboard() {
-  const supabase = createClient();
   const router = useRouter();
 
   const [classes, setClasses] = useState<Class[]>([]);

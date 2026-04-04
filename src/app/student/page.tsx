@@ -84,8 +84,9 @@ function getDisplayUrl(customPath: string | null, officialPath: string | null) {
   return null; // For storage paths, a signed URL is needed. This is a placeholder for non-async parts.
 }
 
+const supabase = createClient();
+
 export default function StudentDashboard() {
-  const supabase = createClient();
   const router = useRouter();
 
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -113,7 +114,7 @@ export default function StudentDashboard() {
       const { data } = await supabase.storage.from('student-photos').createSignedUrl(activePath, 3600);
       if (data) setPhotoUrl(data.signedUrl);
     }
-  }, [supabase]);
+  }, []);
 
   const loadHistory = useCallback(async () => {
     const res = await fetch('/api/attendance/history');
@@ -145,7 +146,7 @@ export default function StudentDashboard() {
       setHasWebAuthn(browserSupportsWebAuthn());
     }
     init();
-  }, [supabase, fetchPhotoUrl, loadHistory]);
+  }, [fetchPhotoUrl, loadHistory]);
 
   useEffect(() => {
     if (currentTab === 'leaderboard') loadLeaderboard();
