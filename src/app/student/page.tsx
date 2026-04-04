@@ -209,14 +209,18 @@ export default function StudentDashboard() {
     } catch (err) { setError(toErrorMessage(err, 'Upload failed.')); } finally { setUploading(false); }
   }
 
-  // --- Aggregate Metrics ---
+  // --- Aggregate Metrics (Defensive against Supabase Array/Object joins) ---
   const subjectMap = new Map<string, { total: number; present: number; code: string }>();
-  for (const r of records) {
-    const s = r.attendance_sessions?.classes?.subject || 'Unknown';
+  for (const r of (records || [])) {
+    // Supabase can return joined data as an object or a single-element array depending on schema introspection
+    const session = Array.isArray(r.attendance_sessions) ? r.attendance_sessions[0] : r.attendance_sessions;
+    const cls = session ? (Array.isArray(session.classes) ? session.classes[0] : session.classes) : null;
+    
+    const s = cls?.subject || 'Unknown Subject';
     const e = subjectMap.get(s) || { 
       total: 0, 
       present: 0, 
-      code: s.match(/^[A-Z]{2,4}\d{2,4}/)?.[0] || s.substring(0, 3).toUpperCase() + '101' 
+      code: s.match(/^[A-Z]{2,4}\d{2,4}/)?.[0] || s.substring(0, 3).toUpperCase() + (Math.floor(Math.random() * 900) + 100)
     };
     e.total++; if (r.status === 'present') e.present++;
     subjectMap.set(s, e);
@@ -227,8 +231,9 @@ export default function StudentDashboard() {
     pct: Math.round((stats.present / stats.total) * 100)
   }));
 
-  const globalPresent = records.filter(r => r.status === 'present').length;
-  const globalPct = records.length > 0 ? Math.round((globalPresent / records.length) * 100) : 0;
+  const globalPresent = (records || []).filter(r => r.status === 'present').length;
+  const globalPct = (records || []).length > 0 ? Math.round((globalPresent / records.length) * 100) : 0;
+// Version: 1.2
 
   const displayPhoto = photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.full_name || 'Student'}`;
 
@@ -318,14 +323,18 @@ export default function StudentDashboard() {
                 <table>
                   <thead><tr><th>Date</th><th>Subject</th><th>Status</th></tr></thead>
                   <tbody>
-                    {records.map(r => (
-                      <tr key={r.id}>
-                        <td>{r.attendance_sessions?.session_date}</td>
-                        <td>{r.attendance_sessions?.classes?.subject || 'N/A'}</td>
-                        <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
-                      </tr>
-                    ))}
-                    {records.length === 0 && <tr><td colSpan={3} className="text-center text-dim">No records found.</td></tr>}
+                    {(records || []).map(r => {
+                      const session = Array.isArray(r.attendance_sessions) ? r.attendance_sessions[0] : r.attendance_sessions;
+                      const cls = session ? (Array.isArray(session.classes) ? session.classes[0] : session.classes) : null;
+                      return (
+                        <tr key={r.id}>
+                          <td>{session?.session_date || 'N/A'}</td>
+                          <td>{cls?.subject || 'N/A'}</td>
+                          <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
+                        </tr>
+                      );
+                    })}
+                    {(!records || records.length === 0) && <tr><td colSpan={3} className="text-center text-dim">No records found.</td></tr>}
                   </tbody>
                 </table>
               </div>
