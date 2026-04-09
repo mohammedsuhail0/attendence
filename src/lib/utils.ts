@@ -3,9 +3,30 @@ const store = new Map<string, number[]>();
 
 const WINDOW_MS = 60_000; // 1 minute
 const MAX_REQUESTS = 100;
+const PRUNE_INTERVAL = 200;
+let requestsSinceLastPrune = 0;
+
+function pruneExpiredEntries(now: number) {
+  store.forEach((timestamps, key) => {
+    const valid = timestamps.filter((timestamp) => now - timestamp < WINDOW_MS);
+    if (valid.length === 0) {
+      store.delete(key);
+      return;
+    }
+    if (valid.length !== timestamps.length) {
+      store.set(key, valid);
+    }
+  });
+}
 
 export function rateLimit(key: string): { allowed: boolean; remaining: number } {
   const now = Date.now();
+  requestsSinceLastPrune += 1;
+  if (requestsSinceLastPrune >= PRUNE_INTERVAL) {
+    pruneExpiredEntries(now);
+    requestsSinceLastPrune = 0;
+  }
+
   const timestamps = store.get(key) ?? [];
   
   // Remove expired timestamps

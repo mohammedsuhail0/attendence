@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   calculateAttendancePercentage,
   formatDisplayDate,
@@ -7,6 +7,7 @@ import {
   getMonthKeyInTimeZone,
   getNextMonthKey,
   isTokenExpired,
+  rateLimit,
   TOKEN_VALIDITY_SECONDS,
 } from './utils';
 
@@ -61,5 +62,37 @@ describe('utils', () => {
   it('gets next month key correctly', () => {
     expect(getNextMonthKey('2026-04')).toBe('2026-05');
     expect(getNextMonthKey('2026-12')).toBe('2027-01');
+  });
+
+  it('allows exactly 100 requests per minute per key', () => {
+    const key = `rate-limit-100-${Date.now()}`;
+    for (let attempt = 1; attempt <= 100; attempt += 1) {
+      const result = rateLimit(key);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(100 - attempt);
+    }
+
+    const blocked = rateLimit(key);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.remaining).toBe(0);
+  });
+
+  it('resets allowance after the 60-second window', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-09T00:00:00.000Z'));
+
+    const key = 'rate-limit-window-reset';
+    for (let attempt = 1; attempt <= 100; attempt += 1) {
+      rateLimit(key);
+    }
+
+    expect(rateLimit(key).allowed).toBe(false);
+
+    vi.advanceTimersByTime(60_001);
+    const resetAttempt = rateLimit(key);
+    expect(resetAttempt.allowed).toBe(true);
+    expect(resetAttempt.remaining).toBe(99);
+
+    vi.useRealTimers();
   });
 });
