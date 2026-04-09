@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
@@ -71,7 +72,12 @@ export default function LoginPage() {
       return;
     }
 
-    const destination = profile?.role === 'teacher' ? '/teacher' : '/student';
+    const destination =
+      profile?.role === 'teacher'
+        ? '/teacher'
+        : profile?.role === 'admin'
+          ? '/admin'
+          : '/student';
 
     // A full navigation is more reliable immediately after auth changes.
     window.location.assign(destination);
@@ -79,15 +85,20 @@ export default function LoginPage() {
 
   return (
     <div className="login-wrapper">
-      <main className="signin-phone" role="main" aria-label="ClassNova sign in">
+      <main className="signin-phone" role="main" aria-label="Nova Class sign in">
         <div className="signin-glow signin-glow-top" aria-hidden="true" />
         <div className="signin-glow signin-glow-bottom" aria-hidden="true" />
 
         <header className="signin-brand-row">
-          <span className="signin-logo" aria-hidden="true">
-            <span className="signin-logo-dot" />
-          </span>
-          <h1>ClassNova</h1>
+          <Image
+            src="/images/nova-class-logo.png"
+            alt="Nova Class logo"
+            className="signin-logo-image"
+            width={78}
+            height={78}
+            priority
+          />
+          <h1>Nova Class</h1>
         </header>
 
         <p className="signin-pill">

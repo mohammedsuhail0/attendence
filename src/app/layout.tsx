@@ -15,8 +15,13 @@ const bodyFont = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: 'ClassNova',
-  description: 'ClassNova portal for secure, token-based classroom tracking',
+  title: 'Nova Class',
+  description: 'Nova Class portal for secure, token-based classroom tracking',
+  icons: {
+    icon: '/images/nova-class-logo.png',
+    shortcut: '/images/nova-class-logo.png',
+    apple: '/images/nova-class-logo.png',
+  },
 };
 
 export const viewport: Viewport = {
