@@ -93,4 +93,19 @@ describe('webauthn helpers', () => {
       transports: ['internal', 'usb'],
     });
   });
+
+  it('accepts legacy string counters in stored credentials', () => {
+    expect(
+      parseStoredWebAuthnCredential({
+        id: 'cred',
+        publicKey: 'key',
+        counter: '7',
+      })
+    ).toEqual({
+      id: 'cred',
+      publicKey: 'key',
+      counter: 7,
+      transports: undefined,
+    });
+  });
 });

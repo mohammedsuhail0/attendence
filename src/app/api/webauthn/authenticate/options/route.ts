@@ -37,7 +37,8 @@ export async function POST(request: Request) {
       allowCredentials: [
         {
           id: credential.id,
-          transports: credential.transports,
+          // Keep authenticator discovery aligned with how this credential was registered.
+          transports: credential.transports?.length ? credential.transports : undefined,
         },
       ],
       userVerification: 'required',

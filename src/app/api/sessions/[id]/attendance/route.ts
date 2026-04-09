@@ -31,7 +31,7 @@ export async function GET(
     const { data: records, error } = await supabase
       .from('attendance_records')
       .select(
-        '*, profiles!attendance_records_student_id_fkey(full_name, roll_number, email, photo_path)'
+        'student_id, status, mark_mode, marked_at, profiles!attendance_records_student_id_fkey(full_name, roll_number)'
       )
       .eq('session_id', id)
       .order('marked_at', { ascending: true });

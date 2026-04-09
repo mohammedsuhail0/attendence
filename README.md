@@ -1,4 +1,4 @@
-# Smart Attendance Web MVP
+# ClassNova Web MVP
 
 Token-based attendance system for college classes with teacher and student dashboards.
 
@@ -13,7 +13,7 @@ Token-based attendance system for college classes with teacher and student dashb
 
 - Teacher login and dashboard
 - Create attendance session by `department + section + subject + period + date`
-- 25-second live token generation and refresh
+- 30-second live token generation and refresh
 - Student token submit flow
 - One attendance mark per student per session
 - Auto-absent marking when session closes
@@ -28,7 +28,7 @@ Copy `.env.example` to `.env.local` and fill values:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-WEBAUTHN_RP_NAME=SmartAttendance
+WEBAUTHN_RP_NAME=ClassNova
 WEBAUTHN_RP_ID=localhost
 WEBAUTHN_ORIGIN=http://localhost:3000
 ```

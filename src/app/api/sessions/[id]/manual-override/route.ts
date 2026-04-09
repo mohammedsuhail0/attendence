@@ -95,51 +95,68 @@ export async function GET(
       (records || []).map((record) => [record.student_id, record.status])
     );
 
-    const students = await Promise.all(
-      (enrollments || []).map(async (enrollment) => {
-        const rawProfile = enrollment.profiles;
-        const profileCandidate = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
-        const profile = isProfileRecord(profileCandidate) ? profileCandidate : null;
-        let photo_url: string | null = null;
-        const rollNumber = profile && typeof profile.roll_number === 'string' ? profile.roll_number : '';
-        const photoPath =
-          photoColumnAvailable &&
-          profile &&
-          typeof profile.photo_path === 'string'
-            ? profile.photo_path
-            : null;
+    const preparedStudents = (enrollments || []).map((enrollment) => {
+      const rawProfile = enrollment.profiles;
+      const profileCandidate = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
+      const profile = isProfileRecord(profileCandidate) ? profileCandidate : null;
+      const rollNumber = profile && typeof profile.roll_number === 'string' ? profile.roll_number : '';
+      const photoPath =
+        photoColumnAvailable &&
+        profile &&
+        typeof profile.photo_path === 'string'
+          ? profile.photo_path
+          : null;
 
-        if (isDirectImageSource(photoPath)) {
-          photo_url = photoPath;
-        }
+      const canonicalPhotoPath = rollNumber ? `${PHOTO_PREFIX}/${rollNumber}.png` : null;
+      const candidatePhotoPaths = [canonicalPhotoPath, photoPath].filter(
+        (value, index, arr): value is string =>
+          Boolean(value) && !isDirectImageSource(value) && arr.indexOf(value) === index
+      );
 
-        const canonicalPhotoPath = rollNumber ? `${PHOTO_PREFIX}/${rollNumber}.png` : null;
-        const candidatePhotoPaths = [canonicalPhotoPath, photoPath].filter(
-          (value, index, arr): value is string =>
-            Boolean(value) && !isDirectImageSource(value) && arr.indexOf(value) === index
-        );
+      return {
+        student_id: enrollment.student_id,
+        full_name: profile?.full_name || '',
+        roll_number: profile?.roll_number || '',
+        email: profile?.email || '',
+        photo_path: photoPath || null,
+        direct_photo_url: isDirectImageSource(photoPath) ? photoPath : null,
+        candidate_photo_paths: candidatePhotoPaths,
+      };
+    });
 
-        for (const candidatePath of candidatePhotoPaths) {
-          const { data: signedUrlData, error: signedUrlError } = await admin.storage
-            .from(PHOTO_BUCKET)
-            .createSignedUrl(candidatePath, 60 * 60);
-          if (!signedUrlError && signedUrlData?.signedUrl) {
-            photo_url = signedUrlData.signedUrl;
-            break;
-          }
-        }
-
-        return {
-          student_id: enrollment.student_id,
-          full_name: profile?.full_name || '',
-          roll_number: profile?.roll_number || '',
-          email: profile?.email || '',
-          photo_path: photoPath || null,
-          photo_url,
-          attendance_status: statusByStudentId.get(enrollment.student_id) || 'not_marked',
-        };
-      })
+    const uniqueCandidatePaths = Array.from(
+      new Set(preparedStudents.flatMap((student) => student.candidate_photo_paths))
     );
+    const signedUrlByPath = new Map<string, string>();
+
+    if (uniqueCandidatePaths.length > 0) {
+      const { data: signedBatchData, error: signedBatchError } = await admin.storage
+        .from(PHOTO_BUCKET)
+        .createSignedUrls(uniqueCandidatePaths, 60 * 60);
+
+      if (!signedBatchError && signedBatchData) {
+        uniqueCandidatePaths.forEach((path, index) => {
+          const signedUrl = signedBatchData[index]?.signedUrl;
+          if (signedUrl) signedUrlByPath.set(path, signedUrl);
+        });
+      }
+    }
+
+    const students = preparedStudents.map((student) => {
+      const fallbackSignedUrl = student.candidate_photo_paths
+        .map((path) => signedUrlByPath.get(path) || null)
+        .find((url): url is string => Boolean(url)) || null;
+
+      return {
+        student_id: student.student_id,
+        full_name: student.full_name,
+        roll_number: student.roll_number,
+        email: student.email,
+        photo_path: student.photo_path,
+        photo_url: student.direct_photo_url || fallbackSignedUrl,
+        attendance_status: statusByStudentId.get(student.student_id) || 'not_marked',
+      };
+    });
 
     students.sort((left, right) =>
       String(left.roll_number || '').localeCompare(String(right.roll_number || ''))

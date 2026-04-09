@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  calculateAttendancePercentage,
+  getMonthKeyInTimeZone,
+  getNextMonthKey,
+} from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,8 +61,11 @@ type AttendanceRow = {
   status: string;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const scope = searchParams.get('scope') === 'all-time' ? 'all-time' : 'monthly';
+
     const supabase = await createClient();
 
     const {
@@ -90,9 +98,20 @@ export async function GET() {
       return NextResponse.json({ error: studentsError.message }, { status: 500 });
     }
 
-    const { data: records, error: recordsError } = await admin
-      .from('attendance_records')
-      .select('student_id, status');
+    const monthKey = getMonthKeyInTimeZone(new Date(), 'Asia/Kolkata');
+    const monthStart = `${monthKey}-01`;
+    const nextMonthStart = `${getNextMonthKey(monthKey)}-01`;
+
+    const recordsQuery =
+      scope === 'monthly'
+        ? admin
+            .from('attendance_records')
+            .select('student_id, status, attendance_sessions!inner(session_date)')
+            .gte('attendance_sessions.session_date', monthStart)
+            .lt('attendance_sessions.session_date', nextMonthStart)
+        : admin.from('attendance_records').select('student_id, status');
+
+    const { data: records, error: recordsError } = await recordsQuery;
 
     if (recordsError) {
       return NextResponse.json({ error: recordsError.message }, { status: 500 });
@@ -112,7 +131,7 @@ export async function GET() {
     const leaderboardBase = ((students || []) as StudentRow[])
       .map((student) => {
         const stats = statsByStudentId.get(student.id) || { total: 0, present: 0 };
-        const percentage = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
+        const percentage = calculateAttendancePercentage(stats.present, stats.total);
 
         return {
           student_id: student.id,
@@ -138,7 +157,12 @@ export async function GET() {
     );
 
     return NextResponse.json(
-      { leaderboard, metric: 'attendance_percentage' },
+      {
+        leaderboard,
+        metric: scope === 'monthly' ? 'monthly_attendance_percentage' : 'attendance_percentage',
+        scope,
+        month: scope === 'monthly' ? monthKey : null,
+      },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } }
     );
   } catch {

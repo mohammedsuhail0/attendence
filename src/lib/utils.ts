@@ -2,7 +2,7 @@
 const store = new Map<string, number[]>();
 
 const WINDOW_MS = 60_000; // 1 minute
-const MAX_REQUESTS = 5;
+const MAX_REQUESTS = 100;
 
 export function rateLimit(key: string): { allowed: boolean; remaining: number } {
   const now = Date.now();
@@ -69,4 +69,30 @@ export function formatDisplayDate(dateValue: string): string {
   return `${day}-${month}-${year.slice(-2)}`;
 }
 
-export const TOKEN_VALIDITY_SECONDS = 25;
+export function calculateAttendancePercentage(present: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((present / total) * 100);
+}
+
+export function getMonthKeyInTimeZone(
+  date: Date = new Date(),
+  timeZone: string = 'Asia/Kolkata'
+): string {
+  return getDateStringInTimeZone(date, timeZone).slice(0, 7);
+}
+
+export function getNextMonthKey(monthKey: string): string {
+  const [yearPart, monthPart] = monthKey.split('-');
+  const year = Number(yearPart);
+  const month = Number(monthPart);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error('Invalid month key format. Expected YYYY-MM');
+  }
+
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+}
+
+export const TOKEN_VALIDITY_SECONDS = 30;

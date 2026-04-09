@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   browserSupportsWebAuthn,
   platformAuthenticatorIsAvailable,
@@ -9,7 +9,12 @@ import {
 } from '@simplewebauthn/browser';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { formatDisplayDate } from '@/lib/utils';
+import Image from 'next/image';
+import {
+  calculateAttendancePercentage,
+  formatDisplayDate,
+  getMonthKeyInTimeZone,
+} from '@/lib/utils';
 
 interface AttendanceRecord {
   id: string;
@@ -54,6 +59,23 @@ const DEFAULT_AVATARS = [
   'https://api.dicebear.com/9.x/notionists/svg?seed=River',
 ];
 
+const STUDENT_CACHE_VERSION = 'v1';
+const STUDENT_LEADERBOARD_SCOPE = 'monthly';
+type AuthRequestOptions = Parameters<typeof startAuthentication>[0];
+
+function studentCacheKey(userId: string, key: 'history' | 'leaderboard-monthly') {
+  return `student-dashboard-${STUDENT_CACHE_VERSION}-${userId}-${key}`;
+}
+
+function safeParseJson<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
@@ -87,18 +109,58 @@ export default function StudentDashboard() {
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [historyMonthFilter, setHistoryMonthFilter] = useState('all');
   const [historyDateFilter, setHistoryDateFilter] = useState('all');
+  const leaderboardInFlightRef = useRef(false);
+  const historyInFlightRef = useRef(false);
+  const lastBackgroundRefreshAtRef = useRef(0);
+  const authOptionsCacheRef = useRef<{ options: AuthRequestOptions; fetchedAt: number } | null>(null);
+  const authOptionsInFlightRef = useRef<Promise<AuthRequestOptions> | null>(null);
 
-  async function loadLeaderboard() {
-    setLeaderboardLoading(true);
+  async function loadLeaderboard(
+    userIdForCache?: string,
+    options?: { silent?: boolean }
+  ) {
+    if (leaderboardInFlightRef.current) return;
+    leaderboardInFlightRef.current = true;
+    if (!options?.silent) setLeaderboardLoading(true);
     try {
-      const res = await fetch('/api/attendance/leaderboard', { cache: 'no-store' });
+      const res = await fetch(`/api/attendance/leaderboard?scope=${STUDENT_LEADERBOARD_SCOPE}`, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load leaderboard');
-      setLeaderboard(data.leaderboard || []);
+      const nextLeaderboard = (data.leaderboard || []) as LeaderboardEntry[];
+      setLeaderboard(nextLeaderboard);
+      const cacheUserId = userIdForCache || currentUserId;
+      if (cacheUserId) {
+        window.sessionStorage.setItem(
+          studentCacheKey(cacheUserId, 'leaderboard-monthly'),
+          JSON.stringify(nextLeaderboard)
+        );
+      }
     } catch (e: unknown) {
       setError(toErrorMessage(e, 'Failed to load leaderboard'));
     } finally {
-      setLeaderboardLoading(false);
+      if (!options?.silent) setLeaderboardLoading(false);
+      leaderboardInFlightRef.current = false;
+    }
+  }
+
+  async function loadHistory(userIdForCache?: string) {
+    if (historyInFlightRef.current) return;
+    historyInFlightRef.current = true;
+    try {
+      const res = await fetch('/api/attendance/history', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load attendance history');
+      const nextRecords = (data.records || []) as AttendanceRecord[];
+      setRecords(nextRecords);
+      const cacheUserId = userIdForCache || currentUserId;
+      if (cacheUserId) {
+        window.sessionStorage.setItem(
+          studentCacheKey(cacheUserId, 'history'),
+          JSON.stringify(nextRecords)
+        );
+      }
+    } finally {
+      historyInFlightRef.current = false;
     }
   }
 
@@ -108,25 +170,75 @@ export default function StudentDashboard() {
       if (!user) return;
       setCurrentUserId(user.id);
 
-      const { data: p } = await supabase
+      const cachedHistory = safeParseJson<AttendanceRecord[]>(
+        window.sessionStorage.getItem(studentCacheKey(user.id, 'history'))
+      );
+      if (cachedHistory) {
+        setRecords(cachedHistory);
+      }
+
+      const cachedLeaderboard = safeParseJson<LeaderboardEntry[]>(
+        window.sessionStorage.getItem(studentCacheKey(user.id, 'leaderboard-monthly'))
+      );
+      if (cachedLeaderboard) {
+        setLeaderboard(cachedLeaderboard);
+        setLeaderboardLoading(false);
+      }
+
+      const profilePromise = supabase
         .from('profiles')
         .select('full_name, roll_number, photo_path, webauthn_credential')
         .eq('id', user.id)
         .single();
 
+      await Promise.allSettled([loadHistory(user.id), loadLeaderboard(user.id)]);
+
+      const { data: p } = await profilePromise;
       setProfile(p);
       setHasBiometric(Boolean(p?.webauthn_credential));
 
       const localAvatar = window.localStorage.getItem(`student-avatar-${user.id}`);
       setProfileImage(localAvatar || p?.photo_path || DEFAULT_AVATARS[0]);
-
-      const res = await fetch('/api/attendance/history');
-      const data = await res.json();
-      if (data.records) setRecords(data.records);
-
-      await loadLeaderboard();
     }
     load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const triggerBackgroundRefresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastBackgroundRefreshAtRef.current < 15000) return;
+      lastBackgroundRefreshAtRef.current = now;
+      void loadHistory();
+      void loadLeaderboard(undefined, { silent: true });
+    };
+
+    const intervalId = window.setInterval(() => {
+      triggerBackgroundRefresh();
+    }, 30000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const refreshNow = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastBackgroundRefreshAtRef.current < 15000) return;
+      lastBackgroundRefreshAtRef.current = now;
+      void loadHistory();
+      void loadLeaderboard(undefined, { silent: true });
+    };
+
+    window.addEventListener('focus', refreshNow);
+    document.addEventListener('visibilitychange', refreshNow);
+
+    return () => {
+      window.removeEventListener('focus', refreshNow);
+      document.removeEventListener('visibilitychange', refreshNow);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -212,17 +324,67 @@ export default function StudentDashboard() {
     }
     requireBiometricSupport();
 
-    const optionsRes = await fetch('/api/webauthn/authenticate/options', {
-      method: 'POST',
-    });
-    const optionsData = await optionsRes.json();
+    const maxOptionsAgeMs = 30_000;
+    const cachedOptions = authOptionsCacheRef.current;
+    const now = Date.now();
+    const isCacheFresh =
+      cachedOptions && now - cachedOptions.fetchedAt <= maxOptionsAgeMs;
 
-    if (!optionsRes.ok) {
-      throw new Error(optionsData.error || 'Unable to start biometric verification.');
+    if (isCacheFresh) {
+      return startAuthentication(cachedOptions.options);
     }
 
-    return startAuthentication(optionsData.options);
+    const options = await fetchAuthenticationOptions();
+    return startAuthentication(options);
   }
+
+  async function fetchAuthenticationOptions(force = false): Promise<AuthRequestOptions> {
+    const maxOptionsAgeMs = 30_000;
+    const cachedOptions = authOptionsCacheRef.current;
+    const now = Date.now();
+    const isCacheFresh =
+      cachedOptions && now - cachedOptions.fetchedAt <= maxOptionsAgeMs;
+
+    if (!force && isCacheFresh) {
+      return cachedOptions.options;
+    }
+
+    if (!force && authOptionsInFlightRef.current) {
+      return authOptionsInFlightRef.current;
+    }
+
+    const requestPromise = (async () => {
+      const optionsRes = await fetch('/api/webauthn/authenticate/options', {
+        method: 'POST',
+      });
+      const optionsData = await optionsRes.json();
+
+      if (!optionsRes.ok) {
+        throw new Error(optionsData.error || 'Unable to start biometric verification.');
+      }
+
+      authOptionsCacheRef.current = {
+        options: optionsData.options,
+        fetchedAt: Date.now(),
+      };
+
+      return optionsData.options as AuthRequestOptions;
+    })();
+
+    authOptionsInFlightRef.current = requestPromise;
+
+    try {
+      return await requestPromise;
+    } finally {
+      authOptionsInFlightRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    if (!hasBiometric || biometricReady !== true) return;
+    if (token.length !== 4) return;
+    void fetchAuthenticationOptions();
+  }, [hasBiometric, biometricReady, token]);
 
   async function submitAttendance(e: React.FormEvent) {
     e.preventDefault();
@@ -253,10 +415,9 @@ export default function StudentDashboard() {
 
       setSuccess('Attendance marked successfully.');
       setToken('');
+      authOptionsCacheRef.current = null;
 
-      const res2 = await fetch('/api/attendance/history');
-      const d2 = await res2.json();
-      if (d2.records) setRecords(d2.records);
+      await loadHistory();
 
       await loadLeaderboard();
     } catch (e: unknown) {
@@ -266,10 +427,63 @@ export default function StudentDashboard() {
     }
   }
 
-  // Stats
-  const total = records.length;
-  const present = records.filter((r) => r.status === 'present').length;
-  const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+  // Stats (monthly to match race leaderboard)
+  const currentLeaderboardEntry = useMemo(
+    () => leaderboard.find((entry) => entry.student_id === currentUserId),
+    [leaderboard, currentUserId]
+  );
+  const currentMonthKey = useMemo(() => {
+    return getMonthKeyInTimeZone(new Date(), 'Asia/Kolkata');
+  }, []);
+  const monthlyRecords = useMemo(
+    () =>
+      records.filter((record) =>
+        (record.attendance_sessions?.session_date || '').startsWith(currentMonthKey)
+      ),
+    [records, currentMonthKey]
+  );
+  const monthlyTotal = monthlyRecords.length;
+  const monthlyPresent = monthlyRecords.filter((r) => r.status === 'present').length;
+  const monthlyPercentage = calculateAttendancePercentage(monthlyPresent, monthlyTotal);
+
+  const syncedLeaderboard = useMemo(() => {
+    if (!currentUserId) return leaderboard;
+
+    let found = false;
+    const next = leaderboard.map((entry) => {
+      if (entry.student_id !== currentUserId) return entry;
+      found = true;
+      return {
+        ...entry,
+        total: monthlyTotal,
+        present: monthlyPresent,
+        percentage: monthlyPercentage,
+      };
+    });
+
+    if (found || !profile) return next;
+
+    return [
+      {
+        student_id: currentUserId,
+        full_name: profile.full_name || 'You',
+        roll_number: profile.roll_number,
+        photo_path: profile.photo_path || null,
+        total: monthlyTotal,
+        present: monthlyPresent,
+        percentage: monthlyPercentage,
+      },
+      ...next,
+    ];
+  }, [leaderboard, currentUserId, monthlyTotal, monthlyPresent, monthlyPercentage, profile]);
+
+  const currentSyncedLeaderboardEntry = useMemo(
+    () => syncedLeaderboard.find((entry) => entry.student_id === currentUserId),
+    [syncedLeaderboard, currentUserId]
+  );
+  const total = currentSyncedLeaderboardEntry?.total ?? monthlyTotal;
+  const present = currentSyncedLeaderboardEntry?.present ?? monthlyPresent;
+  const percentage = currentSyncedLeaderboardEntry?.percentage ?? monthlyPercentage;
 
   // Subject-wise stats
   const subjectMap = new Map<string, { total: number; present: number }>();
@@ -397,11 +611,18 @@ export default function StudentDashboard() {
     <div className="page student-app-shell">
       <div className="student-app-header">
         <div className="student-app-brand">
-          <img src={profileImage} alt="Profile" className="student-app-avatar" />
+          <Image
+            src={profileImage}
+            alt="Profile"
+            className="student-app-avatar"
+            width={40}
+            height={40}
+            unoptimized
+          />
           <span>{profile?.full_name || 'Student'}</span>
         </div>
         <button className="student-app-gear" onClick={handleLogout} title="Sign Out" type="button">
-          ⚙
+          Settings
         </button>
       </div>
 
@@ -411,7 +632,7 @@ export default function StudentDashboard() {
       {activeTab === 'dashboard' && (
         <>
           <section className="student-status-strip">
-            <div className="student-status-icon">◍</div>
+            <div className="student-status-icon">Live</div>
             <div>
               <h3>Biometric Status</h3>
               <p>{hasBiometric ? 'Biometric is active' : 'Biometric setup required'}</p>
@@ -437,7 +658,7 @@ export default function StudentDashboard() {
               <label htmlFor="token-input" className="student-token-grid" aria-label="4 digit token">
                 {[0, 1, 2, 3].map((index) => (
                   <span key={index} className="student-token-box">
-                    {token[index] || '•'}
+                    {token[index] || '*'}
                   </span>
                 ))}
                 <input
@@ -465,11 +686,11 @@ export default function StudentDashboard() {
           <section className="student-kpi-grid mt-2">
             <article className="student-kpi-card light">
               <strong>{percentage}%</strong>
-              <p>Overall Attendance</p>
+              <p>This Month Attendance ({monthLabel(currentMonthKey)})</p>
             </article>
             <article className="student-kpi-card dark">
               <strong>{percentage >= 75 ? 'Good Standing' : 'Low Attendance'}</strong>
-              <p>{percentage >= 75 ? 'Above Requirement' : 'Below Requirement'}</p>
+              <p>{percentage >= 75 ? 'Monthly Target Met' : 'Monthly Target Missed'}</p>
             </article>
           </section>
 
@@ -518,9 +739,9 @@ export default function StudentDashboard() {
       {activeTab === 'subjects' && (
         <section className="card student-leaderboard mt-2">
           <div className="student-section-headline">
-            <h2>Race to #1</h2>
+            <h2>Race to #1 (This Month)</h2>
             <p className="student-race-copy">Beat the class average and climb the rank table.</p>
-            <button className="btn btn-outline btn-sm" onClick={loadLeaderboard} type="button">
+            <button className="btn btn-outline btn-sm" onClick={() => void loadLeaderboard()} type="button">
               Refresh
             </button>
           </div>
@@ -528,7 +749,7 @@ export default function StudentDashboard() {
             <p className="text-dim text-sm mt-1">Loading leaderboard...</p>
           ) : (
             <div className="leaderboard-list mt-1">
-              {leaderboard.map((entry, index) => (
+              {syncedLeaderboard.map((entry, index) => (
                 <article key={entry.student_id} className="leaderboard-item">
                   <div className="leaderboard-rank">#{index + 1}</div>
                   <div className="leaderboard-main">
@@ -620,7 +841,14 @@ export default function StudentDashboard() {
           <h2>Profile Image</h2>
           <p className="text-dim text-sm mt-1">Choose an avatar or pick one from your gallery.</p>
           <div className="student-profile-preview-wrap">
-            <img src={profileImage} alt="Selected profile" className="student-profile-preview" />
+            <Image
+              src={profileImage}
+              alt="Selected profile"
+              className="student-profile-preview"
+              width={96}
+              height={96}
+              unoptimized
+            />
             <p className="text-sm mt-1">{profile?.full_name || 'Student'}</p>
           </div>
           <div className="student-avatar-grid mt-2">
@@ -631,7 +859,7 @@ export default function StudentDashboard() {
                 className={`student-avatar-option ${profileImage === avatar ? 'active' : ''}`}
                 onClick={() => void saveProfileImage(avatar)}
               >
-                <img src={avatar} alt="Avatar option" />
+                <Image src={avatar} alt="Avatar option" width={48} height={48} unoptimized />
               </button>
             ))}
           </div>
@@ -651,3 +879,4 @@ export default function StudentDashboard() {
     </div>
   );
 }
+

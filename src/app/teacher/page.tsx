@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import type { Class, AttendanceSession } from '@/types/database';
 import { formatDisplayDate, getDateStringInTimeZone } from '@/lib/utils';
 
@@ -30,6 +31,26 @@ type HistoryPresentStudent = {
   mode: 'biometric' | 'manual_override' | 'unknown';
 };
 
+const TEACHER_CACHE_VERSION = 'v1';
+
+function teacherCacheKey(
+  teacherId: string,
+  key: 'classes' | 'sessions' | 'manual-students' | 'attendance-list',
+  sessionId?: string
+) {
+  const suffix = sessionId ? `-${sessionId}` : '';
+  return `teacher-dashboard-${TEACHER_CACHE_VERSION}-${teacherId}-${key}${suffix}`;
+}
+
+function safeParseJson<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 function monthLabel(monthValue: string): string {
   const [year, month] = monthValue.split('-');
   const monthIndex = Number(month) - 1;
@@ -45,6 +66,7 @@ export default function TeacherDashboard() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [profile, setProfile] = useState<{ full_name: string } | null>(null);
+  const [currentTeacherId, setCurrentTeacherId] = useState('');
   const [today, setToday] = useState(() => getDateStringInTimeZone());
 
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -56,12 +78,19 @@ export default function TeacherDashboard() {
   const [token, setToken] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
   const [attendanceList, setAttendanceList] = useState<
-    { status: string; profiles: { full_name: string; roll_number: string } }[]
+    {
+      student_id?: string;
+      status: string;
+      mark_mode?: string;
+      marked_at?: string;
+      profiles: { full_name: string; roll_number: string };
+    }[]
   >([]);
   const [manualStudents, setManualStudents] = useState<ManualOverrideStudent[]>([]);
   const [manualLoading, setManualLoading] = useState(false);
   const [manualSubmittingId, setManualSubmittingId] = useState('');
   const [manualQuery, setManualQuery] = useState('');
+  const [manualListVisible, setManualListVisible] = useState(true);
   const [manualImageFallbacks, setManualImageFallbacks] = useState<Record<string, boolean>>({});
   const [historyMonthFilter, setHistoryMonthFilter] = useState('all');
   const [historyDateFilter, setHistoryDateFilter] = useState('all');
@@ -74,6 +103,7 @@ export default function TeacherDashboard() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const closeInFlightRef = useRef(false);
   const unloadCloseSentRef = useRef(false);
+  const attendancePollInFlightRef = useRef(false);
 
   useEffect(() => {
     const syncToday = () => {
@@ -92,6 +122,17 @@ export default function TeacherDashboard() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setCurrentTeacherId(user.id);
+
+      const cachedClasses = safeParseJson<Class[]>(
+        window.sessionStorage.getItem(teacherCacheKey(user.id, 'classes'))
+      );
+      if (cachedClasses) setClasses(cachedClasses);
+
+      const cachedSessions = safeParseJson<AttendanceSession[]>(
+        window.sessionStorage.getItem(teacherCacheKey(user.id, 'sessions'))
+      );
+      if (cachedSessions) setSessions(cachedSessions);
 
       const { data: p } = await supabase
         .from('profiles')
@@ -100,12 +141,18 @@ export default function TeacherDashboard() {
         .single();
       setProfile(p);
 
-      const res1 = await fetch('/api/classes');
-      const d1 = await res1.json();
-      if (d1.classes) setClasses(d1.classes);
-
-      const res2 = await fetch('/api/sessions');
-      const d2 = await res2.json();
+      const [res1, res2] = await Promise.all([
+        fetch('/api/classes', { cache: 'no-store' }),
+        fetch('/api/sessions', { cache: 'no-store' }),
+      ]);
+      const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
+      if (d1.classes) {
+        setClasses(d1.classes);
+        window.sessionStorage.setItem(
+          teacherCacheKey(user.id, 'classes'),
+          JSON.stringify(d1.classes)
+        );
+      }
       if (d2.sessions) {
         const allSessions = d2.sessions as AttendanceSession[];
         const activeSessions = allSessions.filter((session) => session.status === 'active');
@@ -122,12 +169,20 @@ export default function TeacherDashboard() {
           const refreshedData = await refreshed.json();
           if (refreshedData.sessions) {
             setSessions(refreshedData.sessions);
+            window.sessionStorage.setItem(
+              teacherCacheKey(user.id, 'sessions'),
+              JSON.stringify(refreshedData.sessions)
+            );
           }
           setSuccess(`${activeSessions.length} active session${activeSessions.length > 1 ? 's were' : ' was'} auto-closed.`);
           return;
         }
 
         setSessions(allSessions);
+        window.sessionStorage.setItem(
+          teacherCacheKey(user.id, 'sessions'),
+          JSON.stringify(allSessions)
+        );
       }
     }
 
@@ -353,14 +408,26 @@ export default function TeacherDashboard() {
   }, [filteredHistorySessions, historyPresentBySession, historyPresentLoadingBySession, loadHistoryPresentStudents]);
 
   const loadAttendanceList = useCallback(async (sessionId: string) => {
-    const res = await fetch(`/api/sessions/${sessionId}/attendance`);
+    const res = await fetch(`/api/sessions/${sessionId}/attendance`, { cache: 'no-store' });
     const data = await res.json();
-    if (data.records) setAttendanceList(data.records);
-  }, []);
+    if (!res.ok) {
+      setError(data.error || 'Failed to load attendance list');
+      return;
+    }
+    if (data.records) {
+      setAttendanceList(data.records);
+      if (currentTeacherId) {
+        window.sessionStorage.setItem(
+          teacherCacheKey(currentTeacherId, 'attendance-list', sessionId),
+          JSON.stringify(data.records)
+        );
+      }
+    }
+  }, [currentTeacherId]);
 
   const loadManualOverrideStudents = useCallback(async (sessionId: string) => {
     setManualLoading(true);
-    const res = await fetch(`/api/sessions/${sessionId}/manual-override`);
+    const res = await fetch(`/api/sessions/${sessionId}/manual-override`, { cache: 'no-store' });
     const data = await res.json();
     if (!res.ok) {
       setManualLoading(false);
@@ -368,29 +435,68 @@ export default function TeacherDashboard() {
       return;
     }
     setManualStudents((data.students || []) as ManualOverrideStudent[]);
+    if (currentTeacherId) {
+      window.sessionStorage.setItem(
+        teacherCacheKey(currentTeacherId, 'manual-students', sessionId),
+        JSON.stringify(data.students || [])
+      );
+    }
     setManualLoading(false);
-  }, []);
+  }, [currentTeacherId]);
 
   useEffect(() => {
     if (!activeSession || activeSession.status === 'closed') return;
 
+    if (currentTeacherId) {
+      const cachedAttendance = safeParseJson<
+        {
+          student_id?: string;
+          status: string;
+          mark_mode?: string;
+          marked_at?: string;
+          profiles: { full_name: string; roll_number: string };
+        }[]
+      >(
+        window.sessionStorage.getItem(
+          teacherCacheKey(currentTeacherId, 'attendance-list', activeSession.id)
+        )
+      );
+      if (cachedAttendance) setAttendanceList(cachedAttendance);
+    }
+
     const poll = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (attendancePollInFlightRef.current) return;
+      attendancePollInFlightRef.current = true;
       await loadAttendanceList(activeSession.id);
+      attendancePollInFlightRef.current = false;
     };
 
     poll();
-    const interval = setInterval(poll, 3000);
+    const interval = setInterval(poll, 4000);
     return () => clearInterval(interval);
-  }, [activeSession, loadAttendanceList]);
+  }, [activeSession, loadAttendanceList, currentTeacherId]);
 
   useEffect(() => {
     if (!activeSession || activeSession.status === 'closed') {
       setManualStudents([]);
+      setManualListVisible(true);
       return;
     }
 
+    setManualListVisible(true);
+
+    if (currentTeacherId) {
+      const cachedManualStudents = safeParseJson<ManualOverrideStudent[]>(
+        window.sessionStorage.getItem(
+          teacherCacheKey(currentTeacherId, 'manual-students', activeSession.id)
+        )
+      );
+      if (cachedManualStudents) setManualStudents(cachedManualStudents);
+    }
+
     loadManualOverrideStudents(activeSession.id);
-  }, [activeSession, loadManualOverrideStudents]);
+  }, [activeSession, loadManualOverrideStudents, currentTeacherId]);
 
   async function markManualPresent(studentId: string) {
     if (!activeSession) return;
@@ -411,9 +517,49 @@ export default function TeacherDashboard() {
       return;
     }
 
+    const selectedStudent = manualStudents.find((student) => student.student_id === studentId);
+
+    setManualStudents((prev) =>
+      prev.map((student) =>
+        student.student_id === studentId
+          ? { ...student, attendance_status: 'present' }
+          : student
+      )
+    );
+
+    if (selectedStudent) {
+      setAttendanceList((prev) => {
+        const existingIndex = prev.findIndex((record) => record.student_id === studentId);
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = {
+            ...next[existingIndex],
+            status: 'present',
+            mark_mode: 'manual_override',
+            marked_at: new Date().toISOString(),
+          };
+          return next;
+        }
+
+        return [
+          {
+            student_id: studentId,
+            status: 'present',
+            mark_mode: 'manual_override',
+            marked_at: new Date().toISOString(),
+            profiles: {
+              full_name: selectedStudent.full_name,
+              roll_number: selectedStudent.roll_number,
+            },
+          },
+          ...prev,
+        ];
+      });
+    }
+
     setSuccess('Manual override marked successfully.');
-    await loadManualOverrideStudents(activeSession.id);
-    await loadAttendanceList(activeSession.id);
+    void loadManualOverrideStudents(activeSession.id);
+    void loadAttendanceList(activeSession.id);
     setManualSubmittingId('');
   }
 
@@ -608,14 +754,24 @@ export default function TeacherDashboard() {
           <div className="teacher-manual-card mt-3">
             <div className="teacher-manual-head">
               <h3>Manual Override</h3>
-              <button
-                className="btn btn-outline btn-sm"
-                type="button"
-                onClick={() => activeSession && loadManualOverrideStudents(activeSession.id)}
-                disabled={manualLoading}
-              >
-                {manualLoading ? 'Refreshing...' : 'Refresh'}
-              </button>
+              <div className="flex gap-1">
+                <button
+                  className="btn btn-outline btn-sm"
+                  type="button"
+                  onClick={() => setManualListVisible((prev) => !prev)}
+                  disabled={manualStudents.length === 0}
+                >
+                  {manualListVisible ? 'Hide List' : 'Show List'}
+                </button>
+                <button
+                  className="btn btn-outline btn-sm"
+                  type="button"
+                  onClick={() => activeSession && loadManualOverrideStudents(activeSession.id)}
+                  disabled={manualLoading}
+                >
+                  {manualLoading ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
             </div>
 
             <div className="form-group mt-1">
@@ -626,11 +782,14 @@ export default function TeacherDashboard() {
                 className="form-input"
                 value={manualQuery}
                 onChange={(e) => setManualQuery(e.target.value)}
+                onFocus={() => setManualListVisible(true)}
                 placeholder="Search by name or roll number"
               />
             </div>
 
-            {filteredManualStudents.length === 0 ? (
+            {!manualListVisible ? (
+              <p className="text-dim text-sm">Manual list is hidden. Click Show List to view students.</p>
+            ) : filteredManualStudents.length === 0 ? (
               <p className="text-dim text-sm">No students found for manual override.</p>
             ) : (
               <div className="teacher-manual-list">
@@ -638,10 +797,13 @@ export default function TeacherDashboard() {
                   const alreadyPresent = student.attendance_status === 'present';
                   return (
                     <article className="teacher-manual-item" key={student.student_id}>
-                      <img
+                      <Image
                         src={getManualAvatar(student)}
                         alt={student.full_name}
                         className="teacher-manual-avatar"
+                        width={44}
+                        height={44}
+                        unoptimized
                         onError={() =>
                           setManualImageFallbacks((prev) => ({
                             ...prev,

@@ -15,8 +15,8 @@ const bodyFont = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: 'Smart Attendance',
-  description: 'Smart Attendance portal for token-based classroom tracking',
+  title: 'ClassNova',
+  description: 'ClassNova portal for secure, token-based classroom tracking',
 };
 
 export const viewport: Viewport = {

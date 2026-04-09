@@ -8,10 +8,24 @@ type CookieToSet = {
 };
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const isApiPath = pathname.startsWith('/api');
+  const isPublicApiPath = pathname === '/api/auth/resolve-login';
+  const isPublicPath =
+    pathname === '/' || pathname.startsWith('/login') || isPublicApiPath;
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
-    // Avoid hard 500 in middleware when env is missing/misloaded.
+    // Fail closed for protected pages and APIs when auth runtime is unavailable.
+    if (isApiPath && !isPublicApiPath) {
+      return NextResponse.json({ error: 'Auth service unavailable' }, { status: 503 });
+    }
+    if (!isPublicPath) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next({ request });
   }
 
@@ -35,10 +49,6 @@ export async function middleware(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    const pathname = request.nextUrl.pathname;
-    const isPublicPath =
-      pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/api');
 
     // Unauthenticated users: redirect to login for protected routes only.
     if (!user && !isPublicPath) {
@@ -82,7 +92,14 @@ export async function middleware(request: NextRequest) {
 
     return supabaseResponse;
   } catch {
-    // Never hard-fail request due to middleware runtime error.
+    if (isApiPath && !isPublicApiPath) {
+      return NextResponse.json({ error: 'Auth service unavailable' }, { status: 503 });
+    }
+    if (!isPublicPath) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next({ request });
   }
 }

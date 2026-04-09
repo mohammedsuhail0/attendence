@@ -81,8 +81,17 @@ export function parseStoredWebAuthnCredential(
   if (
     typeof candidate.id !== 'string' ||
     typeof candidate.publicKey !== 'string' ||
-    typeof candidate.counter !== 'number'
+    (typeof candidate.counter !== 'number' && typeof candidate.counter !== 'string')
   ) {
+    return null;
+  }
+
+  const parsedCounter =
+    typeof candidate.counter === 'number'
+      ? candidate.counter
+      : Number.parseInt(candidate.counter, 10);
+
+  if (!Number.isFinite(parsedCounter) || parsedCounter < 0) {
     return null;
   }
 
@@ -96,7 +105,7 @@ export function parseStoredWebAuthnCredential(
   return {
     id: candidate.id,
     publicKey: candidate.publicKey,
-    counter: candidate.counter,
+    counter: parsedCounter,
     transports,
   };
 }
