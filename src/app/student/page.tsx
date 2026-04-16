@@ -61,6 +61,9 @@ const DEFAULT_AVATARS = [
 
 const STUDENT_CACHE_VERSION = 'v1';
 const STUDENT_LEADERBOARD_SCOPE = 'monthly';
+const ATTENDANCE_SUBMIT_MAX_ATTEMPTS = 3;
+const ATTENDANCE_SUBMIT_TIMEOUT_MS = 9_000;
+const RETRYABLE_ATTENDANCE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 type AuthRequestOptions = Parameters<typeof startAuthentication>[0];
 
 function studentCacheKey(userId: string, key: 'history' | 'leaderboard-monthly') {
@@ -87,6 +90,12 @@ function monthLabel(monthValue: string): string {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   if (!year || Number.isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return monthValue;
   return `${monthNames[monthIndex]} ${year}`;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 export default function StudentDashboard() {
@@ -386,6 +395,67 @@ export default function StudentDashboard() {
     void fetchAuthenticationOptions();
   }, [hasBiometric, biometricReady, token]);
 
+  async function submitAttendanceRequest(payload: { token: string; assertion: unknown }) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), ATTENDANCE_SUBMIT_TIMEOUT_MS);
+
+    try {
+      const res = await fetch('/api/attendance/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      let data: unknown = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      return { res, data };
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  async function submitAttendanceWithRetry(payload: { token: string; assertion: unknown }) {
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= ATTENDANCE_SUBMIT_MAX_ATTEMPTS; attempt++) {
+      try {
+        const result = await submitAttendanceRequest(payload);
+        const shouldRetry =
+          !result.res.ok &&
+          RETRYABLE_ATTENDANCE_STATUS_CODES.has(result.res.status) &&
+          attempt < ATTENDANCE_SUBMIT_MAX_ATTEMPTS;
+
+        if (shouldRetry) {
+          await sleep(150 * attempt);
+          continue;
+        }
+
+        return result;
+      } catch (error: unknown) {
+        const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+        const isNetworkError = error instanceof TypeError || isAbortError;
+        lastError = isAbortError
+          ? new Error('Network is slow right now. Please try once more.')
+          : error;
+
+        if (isNetworkError && attempt < ATTENDANCE_SUBMIT_MAX_ATTEMPTS) {
+          await sleep(150 * attempt);
+          continue;
+        }
+
+        throw lastError;
+      }
+    }
+
+    throw lastError || new Error('Failed to submit attendance.');
+  }
+
   async function submitAttendance(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -398,19 +468,18 @@ export default function StudentDashboard() {
       }
 
       const assertion = await createBiometricAssertion();
-
-      const res = await fetch('/api/attendance/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: token.toUpperCase(),
-          assertion,
-        }),
+      const tokenValue = token.toUpperCase();
+      const { res, data } = await submitAttendanceWithRetry({
+        token: tokenValue,
+        assertion,
       });
 
-      const data = await res.json();
+      const errorMessage =
+        typeof data === 'object' && data !== null && 'error' in data
+          ? String((data as { error?: unknown }).error || '')
+          : '';
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit attendance.');
+        throw new Error(errorMessage || 'Failed to submit attendance.');
       }
 
       setSuccess('Attendance marked successfully.');
