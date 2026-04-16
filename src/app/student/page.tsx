@@ -382,7 +382,7 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     if (!hasBiometric || biometricReady !== true) return;
-    if (token.length !== 4) return;
+    if (token.length < 3) return;
     void fetchAuthenticationOptions();
   }, [hasBiometric, biometricReady, token]);
 
@@ -416,10 +416,9 @@ export default function StudentDashboard() {
       setSuccess('Attendance marked successfully.');
       setToken('');
       authOptionsCacheRef.current = null;
-
-      await loadHistory();
-
-      await loadLeaderboard();
+      setLoading(false);
+      void Promise.allSettled([loadHistory(), loadLeaderboard()]);
+      return;
     } catch (e: unknown) {
       setError(toErrorMessage(e, 'Failed to submit attendance.'));
     } finally {
@@ -621,8 +620,19 @@ export default function StudentDashboard() {
           />
           <span>{profile?.full_name || 'Student'}</span>
         </div>
-        <button className="student-app-gear" onClick={handleLogout} title="Sign Out" type="button">
-          Settings
+        <button
+          className="student-app-gear"
+          onClick={() => setActiveTab('profile')}
+          title="Open profile"
+          aria-label="Open profile"
+          type="button"
+        >
+          <svg viewBox="0 0 24 24" className="student-app-gear-icon" aria-hidden="true">
+            <path
+              d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5Zm0 2c-4.42 0-8 2.69-8 6v2h16v-2c0-3.31-3.58-6-8-6Z"
+              fill="currentColor"
+            />
+          </svg>
         </button>
       </div>
 
@@ -866,6 +876,11 @@ export default function StudentDashboard() {
           <div className="mt-2">
             <label htmlFor="gallery-avatar" className="btn btn-outline">Choose From Gallery</label>
             <input id="gallery-avatar" type="file" accept="image/*" onChange={onGalleryPick} className="student-gallery-input" />
+          </div>
+          <div className="mt-2">
+            <button type="button" className="btn btn-outline btn-block" onClick={handleLogout}>
+              Log Out
+            </button>
           </div>
         </section>
       )}

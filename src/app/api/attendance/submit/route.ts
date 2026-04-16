@@ -9,23 +9,23 @@ import { getWebAuthnConfig, parseStoredWebAuthnCredential } from '@/lib/webauthn
 
 export async function POST(request: Request) {
   try {
-    // Rate limit by IP
-    const forwarded = request.headers.get('x-forwarded-for');
-    const ip = forwarded?.split(',')[0]?.trim() || 'unknown';
-    const { allowed } = rateLimit(ip);
-    if (!allowed) {
-      return NextResponse.json(
-        { error: 'Too many attempts. Try again in a minute.' },
-        { status: 429 }
-      );
-    }
-
     const supabase = await createClient();
 
     // Auth check
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Keep 100 req/min limit but scope it per student to avoid same-IP class throttling.
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded?.split(',')[0]?.trim() || 'unknown';
+    const { allowed } = rateLimit(`attendance-submit:${user.id}:${ip}`);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Try again in a minute.' },
+        { status: 429 }
+      );
     }
 
     // Role check
