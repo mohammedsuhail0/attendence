@@ -116,4 +116,4 @@ export function getNextMonthKey(monthKey: string): string {
   return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
 }
 
-export const TOKEN_VALIDITY_SECONDS = 30;
+export const TOKEN_VALIDITY_SECONDS = 25;

@@ -27,8 +27,8 @@ describe('utils', () => {
     expect(isTokenExpired(future)).toBe(false);
   });
 
-  it('uses a 30-second token validity window', () => {
-    expect(TOKEN_VALIDITY_SECONDS).toBe(30);
+  it('uses a 25-second token validity window', () => {
+    expect(TOKEN_VALIDITY_SECONDS).toBe(25);
   });
 
   it('formats dates in the configured time zone', () => {

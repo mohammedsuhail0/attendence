@@ -324,7 +324,7 @@ export default function StudentDashboard() {
     }
     requireBiometricSupport();
 
-    const maxOptionsAgeMs = 30_000;
+    const maxOptionsAgeMs = 25_000;
     const cachedOptions = authOptionsCacheRef.current;
     const now = Date.now();
     const isCacheFresh =
@@ -339,7 +339,7 @@ export default function StudentDashboard() {
   }
 
   async function fetchAuthenticationOptions(force = false): Promise<AuthRequestOptions> {
-    const maxOptionsAgeMs = 30_000;
+    const maxOptionsAgeMs = 25_000;
     const cachedOptions = authOptionsCacheRef.current;
     const now = Date.now();
     const isCacheFresh =
