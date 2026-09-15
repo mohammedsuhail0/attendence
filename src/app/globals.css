@@ -248,6 +248,206 @@ h3 { font-size: 1.15rem; font-weight: 600; }
   box-shadow: 0 0 0 3px rgba(15, 106, 75, 0.15);
 }
 
+/* ========== LOGIN & SIGNIN PAGE (BESPOKE MOBILE APP VIEW) ========== */
+.login-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(196, 154, 70, 0.18), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(15, 106, 75, 0.16), transparent 40%),
+    linear-gradient(180deg, #faf6ee 0%, #f4eddd 100%);
+}
+
+.signin-phone {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(255, 251, 244, 0.94);
+  border: 1px solid rgba(17, 71, 52, 0.14);
+  border-radius: 28px;
+  padding: 2.25rem 1.75rem;
+  box-shadow: 0 20px 50px rgba(24, 55, 43, 0.12), 0 2px 6px rgba(24, 55, 43, 0.04);
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.signin-glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(45px);
+  z-index: 0;
+}
+
+.signin-glow-top {
+  top: -60px;
+  right: -60px;
+  width: 160px;
+  height: 160px;
+  background: rgba(196, 154, 70, 0.25);
+}
+
+.signin-glow-bottom {
+  bottom: -60px;
+  left: -60px;
+  width: 160px;
+  height: 160px;
+  background: rgba(15, 106, 75, 0.2);
+}
+
+.signin-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.85rem;
+  position: relative;
+  z-index: 1;
+}
+
+.signin-logo-image {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: contain;
+  box-shadow: 0 4px 12px rgba(15, 106, 75, 0.15);
+}
+
+.signin-brand-row h1 {
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: #19382f;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.signin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-full);
+  background: rgba(15, 106, 75, 0.08);
+  border: 1px solid rgba(15, 106, 75, 0.2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+  width: fit-content;
+  margin-bottom: 1.25rem;
+  position: relative;
+  z-index: 1;
+}
+
+.signin-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.signin-hero {
+  margin-bottom: 1.35rem;
+  position: relative;
+  z-index: 1;
+}
+
+.signin-hero h2 {
+  font-family: var(--font-display);
+  font-size: 2.15rem;
+  line-height: 1.15;
+  font-weight: 600;
+  color: #19382f;
+  margin-bottom: 0.4rem;
+  letter-spacing: -0.02em;
+}
+
+.signin-hero h2 em {
+  font-style: italic;
+  color: var(--secondary);
+  font-family: var(--font-display);
+}
+
+.signin-hero p {
+  font-size: 0.875rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  position: relative;
+  z-index: 1;
+}
+
+.signin-input {
+  width: 100%;
+  padding: 0.75rem 0.95rem;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid rgba(17, 71, 52, 0.16);
+  border-radius: var(--radius-sm);
+  font-size: 0.925rem;
+  font-family: var(--font);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.signin-input:focus {
+  background: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(15, 106, 75, 0.18);
+}
+
+.signin-submit {
+  width: 100%;
+  padding: 0.85rem 1.25rem;
+  background: var(--primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 6px 16px rgba(15, 106, 75, 0.28);
+  margin-top: 0.5rem;
+  font-family: var(--font);
+}
+
+.signin-submit:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(15, 106, 75, 0.35);
+}
+
+.signin-submit:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.signin-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Fallback .login-card support */
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 2.25rem 1.75rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+}
+
 /* ========== SWITCHABLE HUD (TOKEN <-> DYNAMIC QR) ========== */
 .hud-switcher-pill {
   display: flex;
