@@ -1,1067 +1,860 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import QRCode from 'qrcode';
 import Image from 'next/image';
-import type { Class, AttendanceSession } from '@/types/database';
-import { formatDisplayDate, getDateStringInTimeZone } from '@/lib/utils';
 
-const DEPARTMENT_OPTIONS = ['IT', 'CSE', 'AIDS', 'Civil', 'Mech'] as const;
-const YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
-
-function getClassYear(cls: Class) {
-  // Keep old demo data working while section values are moved from A/B labels to year numbers.
-  return cls.section === 'A' ? '1' : cls.section;
+interface AttendanceRecord {
+  student_id: string;
+  status: string;
+  mark_mode?: string;
+  marked_at?: string;
+  profiles: {
+    full_name: string;
+    roll_number: string;
+  };
 }
 
-type ManualOverrideStudent = {
+interface StudentRosterItem {
   student_id: string;
   full_name: string;
   roll_number: string;
-  photo_url?: string | null;
-  photo_path?: string | null;
-  attendance_status: 'present' | 'absent' | 'not_marked';
-};
-
-type HistoryPresentStudent = {
-  student_id: string;
-  full_name: string;
-  roll_number: string;
-  mode: 'biometric' | 'manual_override' | 'unknown';
-};
-
-const TEACHER_CACHE_VERSION = 'v1';
-
-function teacherCacheKey(
-  teacherId: string,
-  key: 'classes' | 'sessions' | 'manual-students' | 'attendance-list',
-  sessionId?: string
-) {
-  const suffix = sessionId ? `-${sessionId}` : '';
-  return `teacher-dashboard-${TEACHER_CACHE_VERSION}-${teacherId}-${key}${suffix}`;
+  email: string;
+  photo_path: string | null;
+  photo_url: string | null;
+  attendance_status: string;
 }
 
-function safeParseJson<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+interface ClassItem {
+  id: string;
+  subject: string;
+  department: string;
+  section: string;
+  year: number;
 }
 
-function monthLabel(monthValue: string): string {
-  const [year, month] = monthValue.split('-');
-  const monthIndex = Number(month) - 1;
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  if (!year || Number.isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return monthValue;
-  return `${monthNames[monthIndex]} ${year}`;
+interface ActiveSession {
+  id: string;
+  class_id: string;
+  token: string;
+  token_expires_at: string;
+  period: number;
+  session_date: string;
+  status: string;
+  classes?: ClassItem;
+}
+
+interface SessionSummaryItem {
+  id: string;
+  class_id: string;
+  session_date: string;
+  period: number;
+  status: string;
+  created_at: string;
+  classes?: ClassItem;
+  attendance_summary?: {
+    total: number;
+    present: number;
+    absent: number;
+    biometric: number;
+    manual_override: number;
+    auto_absent: number;
+  };
 }
 
 export default function TeacherDashboard() {
   const supabase = createClient();
   const router = useRouter();
 
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [sessions, setSessions] = useState<AttendanceSession[]>([]);
-  const [profile, setProfile] = useState<{ full_name: string } | null>(null);
-  const [currentTeacherId, setCurrentTeacherId] = useState('');
-  const [today, setToday] = useState(() => getDateStringInTimeZone());
-
-  const [selectedDepartment, setSelectedDepartment] = useState('');
-  const [selectedYear, setSelectedYear] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState('');
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [selectedClass, setSelectedClass] = useState('');
   const [period, setPeriod] = useState(1);
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [activeTab, setActiveTab] = useState<'hud' | 'archive'>('hud');
+  const [broadcastMode, setBroadcastMode] = useState<'token' | 'qr'>('qr');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
 
-  const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
-  const [token, setToken] = useState('');
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [attendanceList, setAttendanceList] = useState<
-    {
-      student_id?: string;
-      status: string;
-      mark_mode?: string;
-      marked_at?: string;
-      profiles: { full_name: string; roll_number: string };
-    }[]
-  >([]);
-  const [manualStudents, setManualStudents] = useState<ManualOverrideStudent[]>([]);
-  const [manualLoading, setManualLoading] = useState(false);
-  const [manualSubmittingId, setManualSubmittingId] = useState('');
-  const [manualQuery, setManualQuery] = useState('');
-  const [manualListVisible, setManualListVisible] = useState(true);
-  const [manualImageFallbacks, setManualImageFallbacks] = useState<Record<string, boolean>>({});
-  const [historyMonthFilter, setHistoryMonthFilter] = useState('all');
-  const [historyDateFilter, setHistoryDateFilter] = useState('all');
-  const [historyPresentBySession, setHistoryPresentBySession] = useState<Record<string, HistoryPresentStudent[]>>({});
-  const [historyPresentLoadingBySession, setHistoryPresentLoadingBySession] = useState<Record<string, boolean>>({});
+  const [roster, setRoster] = useState<StudentRosterItem[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [pastSessions, setPastSessions] = useState<SessionSummaryItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [timeLeft, setTimeLeft] = useState(25);
+  const [loading, setLoading] = useState(false);
+  const [overrideLoading, setOverrideLoading] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const closeInFlightRef = useRef(false);
-  const unloadCloseSentRef = useRef(false);
-  const attendancePollInFlightRef = useRef(false);
+  const activeSessionRef = useRef<ActiveSession | null>(null);
+  activeSessionRef.current = activeSession;
 
-  useEffect(() => {
-    const syncToday = () => {
-      setToday(getDateStringInTimeZone());
-    };
-
-    syncToday();
-    const interval = setInterval(syncToday, 60_000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      setCurrentTeacherId(user.id);
-
-      const cachedClasses = safeParseJson<Class[]>(
-        window.sessionStorage.getItem(teacherCacheKey(user.id, 'classes'))
-      );
-      if (cachedClasses) setClasses(cachedClasses);
-
-      const cachedSessions = safeParseJson<AttendanceSession[]>(
-        window.sessionStorage.getItem(teacherCacheKey(user.id, 'sessions'))
-      );
-      if (cachedSessions) setSessions(cachedSessions);
-
-      const { data: p } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-      setProfile(p);
-
-      const [res1, res2] = await Promise.all([
-        fetch('/api/classes', { cache: 'no-store' }),
-        fetch('/api/sessions', { cache: 'no-store' }),
-      ]);
-      const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
-      if (d1.classes) {
-        setClasses(d1.classes);
-        window.sessionStorage.setItem(
-          teacherCacheKey(user.id, 'classes'),
-          JSON.stringify(d1.classes)
-        );
-      }
-      if (d2.sessions) {
-        const allSessions = d2.sessions as AttendanceSession[];
-        const activeSessions = allSessions.filter((session) => session.status === 'active');
-
-        // Clean up stale backend state so teachers do not see lingering active sessions.
-        if (activeSessions.length > 0) {
-          await Promise.all(
-            activeSessions.map((session) =>
-              fetch(`/api/sessions/${session.id}/close`, { method: 'POST' })
-            )
-          );
-
-          const refreshed = await fetch('/api/sessions');
-          const refreshedData = await refreshed.json();
-          if (refreshedData.sessions) {
-            setSessions(refreshedData.sessions);
-            window.sessionStorage.setItem(
-              teacherCacheKey(user.id, 'sessions'),
-              JSON.stringify(refreshedData.sessions)
-            );
-          }
-          setSuccess(`${activeSessions.length} active session${activeSessions.length > 1 ? 's were' : ' was'} auto-closed.`);
-          return;
-        }
-
-        setSessions(allSessions);
-        window.sessionStorage.setItem(
-          teacherCacheKey(user.id, 'sessions'),
-          JSON.stringify(allSessions)
-        );
-      }
-    }
-
-    load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const startTimer = useCallback((expiresAt: string) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    const update = () => {
-      const diff = Math.max(
-        0,
-        Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)
-      );
-      setTimeLeft(diff);
-      if (diff <= 0 && timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-
-    update();
-    timerRef.current = setInterval(update, 1000);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    },
-    []
-  );
-
-  const sendCloseOnExit = useCallback((sessionId: string) => {
-    if (!sessionId || unloadCloseSentRef.current) return;
-    unloadCloseSentRef.current = true;
-
-    const closeUrl = `/api/sessions/${sessionId}/close`;
-
-    // Keepalive fetch is preferred because it keeps auth cookies and follows same API behavior.
+  // Generate QR Code data URL whenever token changes
+  const generateQR = useCallback(async (token: string) => {
+    if (!token) return;
     try {
-      void fetch(closeUrl, {
-        method: 'POST',
-        keepalive: true,
+      const studentUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/student?token=${encodeURIComponent(token)}`
+        : `https://smart-attendance.edu/student?token=${token}`;
+      
+      const url = await QRCode.toDataURL(studentUrl, {
+        width: 380,
+        margin: 1.5,
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'H',
       });
-    } catch {
-      // no-op
-    }
-
-    // Fallback for browsers where keepalive fetch may be unreliable during unload.
-    try {
-      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-        navigator.sendBeacon(closeUrl);
-      }
-    } catch {
-      // no-op
+      setQrCodeDataUrl(url);
+    } catch (err) {
+      console.error('Failed to generate QR code', err);
     }
   }, []);
 
-  useEffect(() => {
-    if (!activeSession || activeSession.status === 'closed') {
-      unloadCloseSentRef.current = false;
-      return;
-    }
-
-    const sessionId = activeSession.id;
-    const handleBeforeUnload = () => {
-      sendCloseOnExit(sessionId);
-    };
-
-    const handlePageHide = () => {
-      sendCloseOnExit(sessionId);
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('pagehide', handlePageHide);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('pagehide', handlePageHide);
-    };
-  }, [activeSession, sendCloseOnExit]);
-
-  const departments = [...DEPARTMENT_OPTIONS];
-  const years = [...YEAR_OPTIONS];
-  const subjects = Array.from(
-    new Set(
-      classes
-        .filter(
-          (cls) =>
-            cls.department === selectedDepartment &&
-            getClassYear(cls) === selectedYear
-        )
-        .map((cls) => cls.subject)
-    )
-  ).sort((left, right) => left.localeCompare(right));
-
-  const historyMonthOptions = useMemo(() => {
-    const months = new Set<string>();
-    for (const session of sessions) {
-      const date = session.session_date;
-      if (date && date.length >= 7) months.add(date.slice(0, 7));
-    }
-    return Array.from(months).sort((left, right) => right.localeCompare(left));
-  }, [sessions]);
-
-  const historyDateOptions = useMemo(() => {
-    const dates = new Set<string>();
-    for (const session of sessions) {
-      const date = session.session_date;
-      if (!date) continue;
-      if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) continue;
-      dates.add(date);
-    }
-    return Array.from(dates).sort((left, right) => right.localeCompare(left));
-  }, [sessions, historyMonthFilter]);
-
-  useEffect(() => {
-    setHistoryDateFilter('all');
-  }, [historyMonthFilter]);
-
-  const filteredHistorySessions = useMemo(() => {
-    return sessions
-      .filter((session) => {
-        if (session.status !== 'closed') return false;
-        const date = session.session_date || '';
-        if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) return false;
-        if (historyDateFilter !== 'all' && date !== historyDateFilter) return false;
-        return true;
-      })
-      .sort((left, right) => {
-        const dateCompare = right.session_date.localeCompare(left.session_date);
-        if (dateCompare !== 0) return dateCompare;
-        return left.period - right.period;
-      });
-  }, [sessions, historyMonthFilter, historyDateFilter]);
-
-  const groupedHistorySessions = useMemo(() => {
-    const groups = new Map<string, AttendanceSession[]>();
-    for (const session of filteredHistorySessions) {
-      const date = session.session_date || 'unknown';
-      const existing = groups.get(date) || [];
-      existing.push(session);
-      groups.set(date, existing);
-    }
-    return Array.from(groups.entries()).sort((left, right) => right[0].localeCompare(left[0]));
-  }, [filteredHistorySessions]);
-
-  const loadHistoryPresentStudents = useCallback(async (sessionId: string) => {
-    if (!sessionId) return;
-    if (historyPresentLoadingBySession[sessionId]) return;
-
-    setHistoryPresentLoadingBySession((prev) => ({
-      ...prev,
-      [sessionId]: true,
-    }));
-
-    const res = await fetch(`/api/sessions/${sessionId}/attendance`);
-    const data = await res.json();
-
-    if (!res.ok) {
-      setHistoryPresentLoadingBySession((prev) => ({
-        ...prev,
-        [sessionId]: false,
-      }));
-      return;
-    }
-
-    const presentStudents: HistoryPresentStudent[] = (data.records || [])
-      .filter((record: { status?: string }) => record.status === 'present')
-      .map(
-        (record: {
-          student_id: string;
-          mark_mode?: string | null;
-          marked_by?: string | null;
-          profiles?: { full_name?: string | null; roll_number?: string | null };
-        }) => ({
-          student_id: record.student_id,
-          full_name: record.profiles?.full_name || 'Unknown Student',
-          roll_number: record.profiles?.roll_number || '-',
-          mode:
-            record.mark_mode === 'manual_override'
-              ? 'manual_override'
-              : record.mark_mode === 'biometric'
-                ? 'biometric'
-                : record.marked_by && record.marked_by !== record.student_id
-                  ? 'manual_override'
-                  : 'unknown',
-        })
-      )
-      .sort((left: HistoryPresentStudent, right: HistoryPresentStudent) => {
-        const leftRoll = String(left.roll_number || '').trim();
-        const rightRoll = String(right.roll_number || '').trim();
-        if (leftRoll && rightRoll) return leftRoll.localeCompare(rightRoll, undefined, { numeric: true });
-        return left.full_name.localeCompare(right.full_name);
-      });
-
-    setHistoryPresentBySession((prev) => ({
-      ...prev,
-      [sessionId]: presentStudents,
-    }));
-
-    setHistoryPresentLoadingBySession((prev) => ({
-      ...prev,
-      [sessionId]: false,
-    }));
-  }, [historyPresentLoadingBySession]);
-
-  useEffect(() => {
-    for (const session of filteredHistorySessions) {
-      if ((session.attendance_summary?.present ?? 0) === 0) {
-        if (!Object.prototype.hasOwnProperty.call(historyPresentBySession, session.id)) {
-          setHistoryPresentBySession((prev) => ({
-            ...prev,
-            [session.id]: [],
-          }));
+  // Fetch classes
+  const fetchClasses = useCallback(async () => {
+    try {
+      const res = await fetch('/api/classes');
+      const data = await res.json();
+      if (res.ok && data.classes) {
+        setClasses(data.classes);
+        if (data.classes.length > 0 && !selectedClass) {
+          setSelectedClass(data.classes[0].id);
         }
-        continue;
       }
-
-      const alreadyLoaded = Object.prototype.hasOwnProperty.call(historyPresentBySession, session.id);
-      if (alreadyLoaded || historyPresentLoadingBySession[session.id]) continue;
-      void loadHistoryPresentStudents(session.id);
+    } catch (e) {
+      console.error('Error fetching classes:', e);
     }
-  }, [filteredHistorySessions, historyPresentBySession, historyPresentLoadingBySession, loadHistoryPresentStudents]);
+  }, [selectedClass]);
 
-  const loadAttendanceList = useCallback(async (sessionId: string) => {
-    const res = await fetch(`/api/sessions/${sessionId}/attendance`, { cache: 'no-store' });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || 'Failed to load attendance list');
-      return;
-    }
-    if (data.records) {
-      setAttendanceList(data.records);
-      if (currentTeacherId) {
-        window.sessionStorage.setItem(
-          teacherCacheKey(currentTeacherId, 'attendance-list', sessionId),
-          JSON.stringify(data.records)
-        );
+  // Fetch sessions list & detect active session
+  const fetchSessions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sessions');
+      const data = await res.json();
+      if (res.ok && data.sessions) {
+        setPastSessions(data.sessions);
+        const active = data.sessions.find((s: SessionSummaryItem) => s.status === 'active');
+        if (active) {
+          setActiveSession(active);
+          generateQR(active.token);
+        }
       }
+    } catch (e) {
+      console.error('Error fetching sessions:', e);
     }
-  }, [currentTeacherId]);
+  }, [generateQR]);
 
-  const loadManualOverrideStudents = useCallback(async (sessionId: string) => {
-    setManualLoading(true);
-    const res = await fetch(`/api/sessions/${sessionId}/manual-override`, { cache: 'no-store' });
-    const data = await res.json();
-    if (!res.ok) {
-      setManualLoading(false);
-      setError(data.error || 'Failed to load manual override list');
-      return;
+  // Fetch roster and records for active session
+  const fetchRoster = useCallback(async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/manual-override`);
+      const data = await res.json();
+      if (res.ok && data.students) {
+        setRoster(data.students);
+      }
+    } catch (e) {
+      console.error('Error fetching roster:', e);
     }
-    setManualStudents((data.students || []) as ManualOverrideStudent[]);
-    if (currentTeacherId) {
-      window.sessionStorage.setItem(
-        teacherCacheKey(currentTeacherId, 'manual-students', sessionId),
-        JSON.stringify(data.students || [])
-      );
-    }
-    setManualLoading(false);
-  }, [currentTeacherId]);
+  }, []);
 
+  const fetchRecords = useCallback(async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/attendance`);
+      const data = await res.json();
+      if (res.ok && data.records) {
+        setRecords(data.records);
+      }
+    } catch (e) {
+      console.error('Error fetching records:', e);
+    }
+  }, []);
+
+  // Check auth & initial load
   useEffect(() => {
-    if (!activeSession || activeSession.status === 'closed') return;
-
-    if (currentTeacherId) {
-      const cachedAttendance = safeParseJson<
-        {
-          student_id?: string;
-          status: string;
-          mark_mode?: string;
-          marked_at?: string;
-          profiles: { full_name: string; roll_number: string };
-        }[]
-      >(
-        window.sessionStorage.getItem(
-          teacherCacheKey(currentTeacherId, 'attendance-list', activeSession.id)
-        )
-      );
-      if (cachedAttendance) setAttendanceList(cachedAttendance);
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      await fetchClasses();
+      await fetchSessions();
     }
+    init();
+  }, [supabase, router, fetchClasses, fetchSessions]);
 
-    const poll = async () => {
-      if (document.visibilityState !== 'visible') return;
-      if (attendancePollInFlightRef.current) return;
-      attendancePollInFlightRef.current = true;
-      await loadAttendanceList(activeSession.id);
-      attendancePollInFlightRef.current = false;
-    };
-
-    poll();
-    const interval = setInterval(poll, 4000);
-    return () => clearInterval(interval);
-  }, [activeSession, loadAttendanceList, currentTeacherId]);
-
+  // Handle active session data sync
   useEffect(() => {
-    if (!activeSession || activeSession.status === 'closed') {
-      setManualStudents([]);
-      setManualListVisible(true);
-      return;
-    }
-
-    setManualListVisible(true);
-
-    if (currentTeacherId) {
-      const cachedManualStudents = safeParseJson<ManualOverrideStudent[]>(
-        window.sessionStorage.getItem(
-          teacherCacheKey(currentTeacherId, 'manual-students', activeSession.id)
-        )
-      );
-      if (cachedManualStudents) setManualStudents(cachedManualStudents);
-    }
-
-    loadManualOverrideStudents(activeSession.id);
-  }, [activeSession, loadManualOverrideStudents, currentTeacherId]);
-
-  async function markManualPresent(studentId: string) {
     if (!activeSession) return;
-    setError('');
-    setSuccess('');
-    setManualSubmittingId(studentId);
 
-    const res = await fetch(`/api/sessions/${activeSession.id}/manual-override`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: studentId }),
-    });
-    const data = await res.json();
+    fetchRoster(activeSession.id);
+    fetchRecords(activeSession.id);
 
-    if (!res.ok) {
-      setManualSubmittingId('');
-      setError(data.error || 'Failed to mark attendance via manual override');
+    // Refresh roster & records every 4 seconds
+    const interval = setInterval(() => {
+      if (activeSessionRef.current) {
+        fetchRoster(activeSessionRef.current.id);
+        fetchRecords(activeSessionRef.current.id);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [activeSession, fetchRoster, fetchRecords]);
+
+  // Refresh token API call
+  const refreshToken = useCallback(async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/refresh`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        setActiveSession((prev) => prev ? { ...prev, token: data.token, token_expires_at: data.token_expires_at } : null);
+        generateQR(data.token);
+        setTimeLeft(25);
+      }
+    } catch (e) {
+      console.error('Error rotating token:', e);
+    }
+  }, [generateQR]);
+
+  // Auto-refresh token rotation countdown (25 seconds)
+  useEffect(() => {
+    if (!activeSession) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          // Trigger token refresh
+          refreshToken(activeSession.id);
+          return 25;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeSession, refreshToken]);
+
+  // Start new attendance session
+  const handleStartSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClass) {
+      setError('Please select a subject class');
       return;
     }
-
-    const selectedStudent = manualStudents.find((student) => student.student_id === studentId);
-
-    setManualStudents((prev) =>
-      prev.map((student) =>
-        student.student_id === studentId
-          ? { ...student, attendance_status: 'present' }
-          : student
-      )
-    );
-
-    if (selectedStudent) {
-      setAttendanceList((prev) => {
-        const existingIndex = prev.findIndex((record) => record.student_id === studentId);
-        if (existingIndex >= 0) {
-          const next = [...prev];
-          next[existingIndex] = {
-            ...next[existingIndex],
-            status: 'present',
-            mark_mode: 'manual_override',
-            marked_at: new Date().toISOString(),
-          };
-          return next;
-        }
-
-        return [
-          {
-            student_id: studentId,
-            status: 'present',
-            mark_mode: 'manual_override',
-            marked_at: new Date().toISOString(),
-            profiles: {
-              full_name: selectedStudent.full_name,
-              roll_number: selectedStudent.roll_number,
-            },
-          },
-          ...prev,
-        ];
-      });
-    }
-
-    setSuccess('Manual override marked successfully.');
-    void loadManualOverrideStudents(activeSession.id);
-    void loadAttendanceList(activeSession.id);
-    setManualSubmittingId('');
-  }
-
-  async function createSession(e: React.FormEvent) {
-    e.preventDefault();
     setError('');
     setSuccess('');
     setLoading(true);
 
-    const selectedClass = classes.find(
-      (cls) =>
-        cls.department === selectedDepartment &&
-        getClassYear(cls) === selectedYear &&
-        cls.subject === selectedSubject
-    );
-
-    if (!selectedClass) {
-      setLoading(false);
-      setError('Please choose department, year, and subject.');
-      return;
-    }
-
-    const res = await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        class_id: selectedClass.id,
-        period,
-        session_date: today,
-      }),
-    });
-
-    const data = await res.json();
-    setLoading(false);
-
-    if (!res.ok) {
-      setError(data.error || 'Failed to create session');
-      return;
-    }
-
-    setActiveSession(data.session);
-    setToken(data.session.token);
-    startTimer(data.session.token_expires_at);
-    setSuccess('Session created! Share the token with students.');
-  }
-
-  async function refreshToken() {
-    if (!activeSession) return;
-    const res = await fetch(`/api/sessions/${activeSession.id}/refresh`, {
-      method: 'POST',
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setToken(data.token);
-      startTimer(data.token_expires_at);
-    }
-  }
-
-  const closeSession = useCallback(async () => {
-    if (!activeSession || closeInFlightRef.current) return;
-    closeInFlightRef.current = true;
-
     try {
-      const res = await fetch(`/api/sessions/${activeSession.id}/close`, {
+      const today = new Date().toISOString().split('T')[0];
+      const res = await fetch('/api/sessions', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: selectedClass,
+          period: Number(period),
+          session_date: today,
+        }),
       });
+
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to close session');
-        return;
-      }
+      if (!res.ok) throw new Error(data.error || 'Failed to start session');
+
+      setActiveSession(data.session);
+      generateQR(data.session.token);
+      setTimeLeft(25);
+      setSuccess('Session started! Broadcasting live.');
+      await fetchSessions();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error starting session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Close attendance session
+  const handleCloseSession = async () => {
+    if (!activeSession) return;
+    if (!confirm('Are you sure you want to close this attendance session? Absent students will be auto-marked.')) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/sessions/${activeSession.id}/close`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to close session');
 
       setActiveSession(null);
-      setToken('');
-      setTimeLeft(0);
-      setManualStudents([]);
-      setManualQuery('');
-      setSuccess(`Session closed. Present: ${data.present}, Absent: ${data.absent}`);
-
-      const res2 = await fetch('/api/sessions');
-      const d2 = await res2.json();
-      if (d2.sessions) setSessions(d2.sessions);
-      unloadCloseSentRef.current = false;
+      setSuccess('Session closed and attendance locked successfully.');
+      await fetchSessions();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error closing session');
     } finally {
-      closeInFlightRef.current = false;
+      setLoading(false);
     }
-  }, [activeSession]);
+  };
 
-  const filteredManualStudents = manualStudents.filter((student) => {
-    const q = manualQuery.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      student.full_name.toLowerCase().includes(q) ||
-      String(student.roll_number || '').toLowerCase().includes(q)
-    );
-  });
+  // Manual Override: 1-Tap mark present
+  const handleManualOverride = async (studentId: string) => {
+    if (!activeSession) return;
+    setOverrideLoading(studentId);
+    try {
+      // Optimistic update
+      setRoster((prev) =>
+        prev.map((s) => (s.student_id === studentId ? { ...s, attendance_status: 'present' } : s))
+      );
 
-  function getManualAvatar(student: ManualOverrideStudent): string {
-    if (!manualImageFallbacks[student.student_id] && student.photo_url) {
-      return student.photo_url;
+      const res = await fetch(`/api/sessions/${activeSession.id}/manual-override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to override attendance');
+      }
+
+      await fetchRoster(activeSession.id);
+      await fetchRecords(activeSession.id);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Override failed');
+      await fetchRoster(activeSession.id);
+    } finally {
+      setOverrideLoading(null);
     }
+  };
 
-    if (!manualImageFallbacks[student.student_id] && student.photo_path) {
-      return student.photo_path;
-    }
+  // Copy token to clipboard
+  const handleCopyToken = () => {
+    if (!activeSession?.token) return;
+    navigator.clipboard.writeText(activeSession.token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
-    const seed = encodeURIComponent(student.roll_number || student.full_name || student.student_id);
-    return `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`;
-  }
-
-  async function handleLogout() {
-    if (activeSession && activeSession.status !== 'closed') {
-      await closeSession();
-    }
+  // Sign out
+  const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
-    router.refresh();
-  }
+  };
+
+  // Export CSV
+  const handleExportCSV = () => {
+    if (!roster.length) return;
+    const headers = ['Roll Number', 'Full Name', 'Email', 'Status'];
+    const rows = roster.map((s) => [
+      s.roll_number,
+      `"${s.full_name}"`,
+      s.email,
+      s.attendance_status === 'present' ? 'Present' : 'Absent',
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Attendance_Session_${activeSession?.session_date || 'report'}_P${activeSession?.period || 1}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Filter roster
+  const filteredRoster = roster.filter(
+    (s) =>
+      s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.roll_number.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const presentCount = roster.filter((s) => s.attendance_status === 'present').length;
+  const totalCount = roster.length;
+  const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+  const defaulterWarningCount = roster.filter((s) => s.attendance_status !== 'present').length;
+
+  const currentClassInfo = classes.find((c) => c.id === (activeSession?.class_id || selectedClass));
 
   return (
-    <div className="page teacher-app-shell">
-      <div className="page-header teacher-app-header">
-        <div className="teacher-title-wrap">
-          <h1>Teacher Studio</h1>
-          <span className="user-info">{profile?.full_name}</span>
+    <div className="viewport-app">
+      {/* Top Header Bar */}
+      <header className="viewport-header">
+        <div className="header-brand">
+          <div className="brand-badge">
+            <span className="badge-dot pulse-emerald"></span>
+            NOVA CLASS STUDIO
+          </div>
+          <div className="header-title-group">
+            <h1>Teacher Attendance Studio</h1>
+            <span className="text-secondary text-xs">
+              {currentClassInfo
+                ? `${currentClassInfo.subject} • Sec ${currentClassInfo.section} (Year ${currentClassInfo.year})`
+                : 'Live Classroom Command Hub'}
+            </span>
+          </div>
         </div>
-        <button className="btn btn-outline btn-sm teacher-logout-btn" onClick={handleLogout}>
-          Sign Out
-        </button>
-      </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
+        <div className="header-actions">
+          {activeSession ? (
+            <div className="session-status-pill active">
+              <span className="live-indicator"></span>
+              <span className="font-semibold text-xs text-emerald-800">
+                PERIOD {activeSession.period} LIVE
+              </span>
+              <span className="text-slate-400 text-xs">|</span>
+              <span className="text-xs text-slate-600 font-mono">
+                Auto-rotates in {timeLeft}s
+              </span>
+            </div>
+          ) : (
+            <div className="session-status-pill idle">
+              <span className="text-xs text-slate-500 font-medium">Ready to Broadcast</span>
+            </div>
+          )}
 
-      {activeSession && (
-        <div className="card teacher-live-card" style={{ borderColor: 'var(--primary)' }}>
-          <div className="card-header teacher-card-header">
-            <h2>Active Session</h2>
-            <span className="badge badge-active">LIVE</span>
+          <div className="header-divider"></div>
+
+          <button
+            onClick={() => setActiveTab(activeTab === 'hud' ? 'archive' : 'hud')}
+            className={`btn-header ${activeTab === 'archive' ? 'btn-header-active' : ''}`}
+          >
+            {activeTab === 'hud' ? '📋 Past Sessions' : '📡 Live Studio'}
+          </button>
+
+          <button onClick={handleSignOut} className="btn-header btn-header-danger">
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      {/* Main Viewport Content */}
+      <div className="viewport-content">
+        {/* Banner Alerts */}
+        {error && (
+          <div className="alert-banner alert-banner-error">
+            <span>⚠️ {error}</span>
+            <button onClick={() => setError('')} className="alert-close">×</button>
           </div>
-
-          <div className="token-display teacher-token-display">
-            <p className="text-dim text-sm">Share this token with students</p>
-            <div className="token-code">{token}</div>
-            <p className={`token-timer ${timeLeft > 0 ? 'active' : 'expired'}`}>
-              {timeLeft > 0 ? `${timeLeft}s remaining` : 'Token expired'}
-            </p>
+        )}
+        {success && (
+          <div className="alert-banner alert-banner-success">
+            <span>✅ {success}</span>
+            <button onClick={() => setSuccess('')} className="alert-close">×</button>
           </div>
+        )}
 
-          <div className="flex-between mt-2 teacher-live-actions">
-            <button className="btn btn-primary btn-sm" onClick={refreshToken}>
-              New Token
-            </button>
-            <button className="btn btn-danger btn-sm" onClick={closeSession}>
-              Close Session
-            </button>
+        {activeTab === 'hud' ? (
+          <div className="viewport-grid grid-3col">
+            {/* COLUMN 1: Session Controls & Parameters */}
+            <section className="bento-card col-controls">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Session Controls</h2>
+                  <p className="card-subtitle">Select class & launch broadcast</p>
+                </div>
+                <span className="badge-light">Period {period}</span>
+              </div>
+
+              {!activeSession ? (
+                <form onSubmit={handleStartSession} className="control-form">
+                  <div className="form-group">
+                    <label className="form-label">Subject & Section</label>
+                    <select
+                      value={selectedClass}
+                      onChange={(e) => setSelectedClass(e.target.value)}
+                      className="form-select"
+                      required
+                    >
+                      {classes.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.subject} ({cls.department} - Sec {cls.section})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group flex-1">
+                      <label className="form-label">Period</label>
+                      <select
+                        value={period}
+                        onChange={(e) => setPeriod(Number(e.target.value))}
+                        className="form-select"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((p) => (
+                          <option key={p} value={p}>
+                            Period {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group flex-1">
+                      <label className="form-label">Date</label>
+                      <input
+                        type="text"
+                        value={new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        disabled
+                        className="form-input bg-slate-50 text-slate-500 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="security-notice-box">
+                    <div className="security-notice-header">
+                      <span>🛡️ Biometric WebAuthn Protected</span>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Students verify with fingerprint/FaceID passkey + dynamic anti-spoof rotating QR.
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || classes.length === 0}
+                    className="btn-primary w-full py-3 text-sm font-semibold shadow-sm"
+                  >
+                    {loading ? 'Launching Broadcast...' : '⚡ Start Live Attendance'}
+                  </button>
+                </form>
+              ) : (
+                <div className="active-session-summary">
+                  <div className="active-session-badge">
+                    <div className="pulse-indicator"></div>
+                    <div>
+                      <div className="text-xs font-semibold text-emerald-900 uppercase tracking-wider">
+                        Session in Progress
+                      </div>
+                      <div className="text-sm font-bold text-slate-800">
+                        {currentClassInfo?.subject || 'Class'} • Period {activeSession.period}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Countdown Timer Card */}
+                  <div className="timer-card">
+                    <div className="timer-header">
+                      <span className="text-xs font-medium text-slate-600">Token Auto-Refresh</span>
+                      <span className="font-mono text-sm font-bold text-indigo-600">{timeLeft}s</span>
+                    </div>
+                    <div className="progress-bar-container">
+                      <div
+                        className="progress-bar-fill"
+                        style={{ width: `${(timeLeft / 25) * 100}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Token refreshes every 25 seconds to prevent sharing.
+                    </p>
+                  </div>
+
+                  {/* Manual Refresh & End Actions */}
+                  <div className="session-actions-stack">
+                    <button
+                      onClick={() => refreshToken(activeSession.id)}
+                      className="btn-secondary w-full text-xs font-semibold"
+                    >
+                      🔄 Rotate Token Now
+                    </button>
+                    <button
+                      onClick={handleCloseSession}
+                      disabled={loading}
+                      className="btn-danger w-full text-xs font-semibold"
+                    >
+                      🛑 End Session & Lock
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Today's Quick Session List */}
+              <div className="quick-archive-section">
+                <div className="section-label">Today&apos;s Sessions</div>
+                <div className="quick-archive-list">
+                  {pastSessions.slice(0, 4).map((s) => (
+                    <div key={s.id} className="quick-archive-row">
+                      <div className="quick-archive-info">
+                        <span className="font-medium text-slate-700">Period {s.period}</span>
+                        <span className="text-xs text-slate-400">
+                          {s.classes?.subject || 'Class'}
+                        </span>
+                      </div>
+                      <span className={`status-badge-sm ${s.status === 'active' ? 'badge-active' : 'badge-closed'}`}>
+                        {s.status}
+                      </span>
+                    </div>
+                  ))}
+                  {pastSessions.length === 0 && (
+                    <p className="text-xs text-slate-400 py-2 text-center">No sessions recorded today</p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* COLUMN 2: Live Broadcast HUD (Centerpiece) */}
+            <section className="bento-card col-broadcast">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Live Broadcast Display</h2>
+                  <p className="card-subtitle">Display on classroom projector or front screen</p>
+                </div>
+
+                {/* Mode Switcher Pill */}
+                <div className="mode-toggle-pill">
+                  <button
+                    onClick={() => setBroadcastMode('qr')}
+                    className={`toggle-tab ${broadcastMode === 'qr' ? 'active' : ''}`}
+                  >
+                    📱 QR Code
+                  </button>
+                  <button
+                    onClick={() => setBroadcastMode('token')}
+                    className={`toggle-tab ${broadcastMode === 'token' ? 'active' : ''}`}
+                  >
+                    🔢 4-Digit PIN
+                  </button>
+                </div>
+              </div>
+
+              {activeSession ? (
+                <div className="broadcast-hero">
+                  {broadcastMode === 'qr' ? (
+                    <div className="qr-broadcast-container">
+                      <div className="qr-box-elevated">
+                        {qrCodeDataUrl ? (
+                          <Image
+                            src={qrCodeDataUrl}
+                            alt="Attendance QR Code"
+                            width={280}
+                            height={280}
+                            className="qr-image"
+                            priority
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="qr-placeholder">Generating live QR...</div>
+                        )}
+                      </div>
+                      <div className="qr-caption">
+                        <span className="badge-qr-pulse">
+                          <span className="pulse-dot"></span> LIVE DYNAMIC QR
+                        </span>
+                        <p className="qr-instruction">
+                          Scan with camera or mobile browser to verify attendance
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="token-broadcast-container">
+                      <div className="token-display-box">
+                        <div className="token-digits">
+                          {activeSession.token.split('').map((char, index) => (
+                            <span key={index} className="token-digit-cell">
+                              {char}
+                            </span>
+                          ))}
+                        </div>
+                        <button onClick={handleCopyToken} className="btn-copy-token">
+                          {copied ? '✓ Copied' : '📋 Copy Token'}
+                        </button>
+                      </div>
+                      <p className="token-instruction">
+                        Students enter this 4-digit code in their portal with biometric verification
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Live Attendance Stats Bar */}
+                  <div className="live-stats-bar">
+                    <div className="stat-item">
+                      <span className="stat-label">Enrolled</span>
+                      <span className="stat-value text-slate-800">{totalCount}</span>
+                    </div>
+                    <div className="stat-divider"></div>
+                    <div className="stat-item">
+                      <span className="stat-label">Present</span>
+                      <span className="stat-value text-emerald-600">{presentCount}</span>
+                    </div>
+                    <div className="stat-divider"></div>
+                    <div className="stat-item">
+                      <span className="stat-label">Rate</span>
+                      <span className="stat-value text-indigo-600">{attendanceRate}%</span>
+                    </div>
+                    <div className="stat-divider"></div>
+                    <div className="stat-item">
+                      <span className="stat-label">Unmarked</span>
+                      <span className="stat-value text-amber-600">{defaulterWarningCount}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="broadcast-idle-state">
+                  <div className="idle-icon-wrap">
+                    <span className="text-4xl">📡</span>
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-700">Studio is Standby</h3>
+                  <p className="text-xs text-slate-400 max-w-xs text-center mt-1">
+                    Select a class and click <strong>Start Live Attendance</strong> on the left panel to broadcast the dynamic QR code or 4-digit token.
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {/* COLUMN 3: Live Attendance Roster & Manual Override */}
+            <section className="bento-card col-roster">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Live Roster</h2>
+                  <p className="card-subtitle">Real-time check-in & manual override</p>
+                </div>
+                {activeSession && (
+                  <button onClick={handleExportCSV} className="btn-export-sm" title="Export CSV">
+                    📥 CSV
+                  </button>
+                )}
+              </div>
+
+              {/* Roster Search Filter */}
+              <div className="roster-search-bar">
+                <input
+                  type="text"
+                  placeholder="Search student or roll no..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="roster-search-input"
+                />
+              </div>
+
+              {/* Student Rows Container (Internal Scroll) */}
+              <div className="roster-list-container">
+                {filteredRoster.map((student) => {
+                  const isPresent = student.attendance_status === 'present';
+                  return (
+                    <div
+                      key={student.student_id}
+                      className={`student-roster-row ${isPresent ? 'row-present' : 'row-absent'}`}
+                    >
+                      <div className="student-avatar-wrap">
+                        {student.photo_url ? (
+                          <Image
+                            src={student.photo_url}
+                            alt={student.full_name}
+                            width={34}
+                            height={34}
+                            className="student-avatar-img"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="student-avatar-fallback">
+                            {student.full_name.charAt(0) || 'S'}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="student-meta">
+                        <div className="student-name">{student.full_name}</div>
+                        <div className="student-roll">{student.roll_number || 'No Roll'}</div>
+                      </div>
+
+                      <div className="student-action">
+                        {isPresent ? (
+                          <span className="badge-present">
+                            ✓ Present
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleManualOverride(student.student_id)}
+                            disabled={!activeSession || overrideLoading === student.student_id}
+                            className="btn-mark-override"
+                            title="1-Tap Manual Override"
+                          >
+                            {overrideLoading === student.student_id ? '...' : '+ Mark'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredRoster.length === 0 && (
+                  <div className="roster-empty-state">
+                    <p className="text-xs text-slate-400">
+                      {activeSession ? 'No matching students found' : 'Start a session to view student roster'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
+        ) : (
+          /* PAST SESSIONS ARCHIVE VIEW */
+          <div className="archive-view-container">
+            <div className="bento-card archive-card">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Attendance Session History</h2>
+                  <p className="card-subtitle">Full historical logs and exports</p>
+                </div>
+                <span className="badge-light">{pastSessions.length} Total Sessions</span>
+              </div>
 
-          {attendanceList.length > 0 && (
-            <div className="mt-3">
-              <h3>
-                Attendance (
-                {attendanceList.filter((record) => record.status === 'present').length} present)
-              </h3>
-              <div className="table-wrapper mt-1">
-                <table>
+              <div className="archive-table-container">
+                <table className="archive-table">
                   <thead>
                     <tr>
-                      <th>Roll No</th>
-                      <th>Name</th>
+                      <th>Date</th>
+                      <th>Subject & Section</th>
+                      <th>Period</th>
                       <th>Status</th>
+                      <th>Present / Total</th>
+                      <th>Attendance Rate</th>
+                      <th>Method Breakdown</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {attendanceList.map((record, index) => (
-                      <tr key={index}>
-                        <td>{record.profiles?.roll_number || '-'}</td>
-                        <td>{record.profiles?.full_name || '-'}</td>
-                        <td>
-                          <span className={`badge badge-${record.status}`}>
-                            {record.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {pastSessions.map((session) => {
+                      const summary = session.attendance_summary || {
+                        total: 0,
+                        present: 0,
+                        absent: 0,
+                        biometric: 0,
+                        manual_override: 0,
+                        auto_absent: 0,
+                      };
+                      const rate = summary.total > 0 ? Math.round((summary.present / summary.total) * 100) : 0;
+
+                      return (
+                        <tr key={session.id}>
+                          <td className="font-mono text-xs">{session.session_date}</td>
+                          <td className="font-semibold text-slate-800">
+                            {session.classes?.subject || 'Class'} ({session.classes?.department} - Sec {session.classes?.section})
+                          </td>
+                          <td>Period {session.period}</td>
+                          <td>
+                            <span className={`status-badge-sm ${session.status === 'active' ? 'badge-active' : 'badge-closed'}`}>
+                              {session.status}
+                            </span>
+                          </td>
+                          <td className="font-semibold">
+                            {summary.present} / {summary.total}
+                          </td>
+                          <td>
+                            <span className={`font-bold ${rate >= 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {rate}%
+                            </span>
+                          </td>
+                          <td className="text-xs text-slate-500">
+                            🔐 {summary.biometric} Bio • ✍️ {summary.manual_override} Manual
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
-          )}
-
-          <div className="teacher-manual-card mt-3">
-            <div className="teacher-manual-head">
-              <h3>Manual Override</h3>
-              <div className="flex gap-1">
-                <button
-                  className="btn btn-outline btn-sm"
-                  type="button"
-                  onClick={() => setManualListVisible((prev) => !prev)}
-                  disabled={manualStudents.length === 0}
-                >
-                  {manualListVisible ? 'Hide List' : 'Show List'}
-                </button>
-                <button
-                  className="btn btn-outline btn-sm"
-                  type="button"
-                  onClick={() => activeSession && loadManualOverrideStudents(activeSession.id)}
-                  disabled={manualLoading}
-                >
-                  {manualLoading ? 'Refreshing...' : 'Refresh'}
-                </button>
-              </div>
-            </div>
-
-            <div className="form-group mt-1">
-              <label htmlFor="manual-search">Find student (name or roll no)</label>
-              <input
-                id="manual-search"
-                type="text"
-                className="form-input"
-                value={manualQuery}
-                onChange={(e) => setManualQuery(e.target.value)}
-                onFocus={() => setManualListVisible(true)}
-                placeholder="Search by name or roll number"
-              />
-            </div>
-
-            {!manualListVisible ? (
-              <p className="text-dim text-sm">Manual list is hidden. Click Show List to view students.</p>
-            ) : filteredManualStudents.length === 0 ? (
-              <p className="text-dim text-sm">No students found for manual override.</p>
-            ) : (
-              <div className="teacher-manual-list">
-                {filteredManualStudents.map((student) => {
-                  const alreadyPresent = student.attendance_status === 'present';
-                  return (
-                    <article className="teacher-manual-item" key={student.student_id}>
-                      <Image
-                        src={getManualAvatar(student)}
-                        alt={student.full_name}
-                        className="teacher-manual-avatar"
-                        width={44}
-                        height={44}
-                        unoptimized
-                        onError={() =>
-                          setManualImageFallbacks((prev) => ({
-                            ...prev,
-                            [student.student_id]: true,
-                          }))
-                        }
-                      />
-                      <div className="teacher-manual-meta">
-                        <h4>{student.full_name}</h4>
-                        <p>{student.roll_number || 'No roll number'}</p>
-                      </div>
-                      <span className={`badge badge-${alreadyPresent ? 'present' : 'closed'}`}>
-                        {alreadyPresent ? 'present' : 'not marked'}
-                      </span>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        type="button"
-                        disabled={alreadyPresent || manualSubmittingId === student.student_id}
-                        onClick={() => markManualPresent(student.student_id)}
-                      >
-                        {manualSubmittingId === student.student_id ? 'Saving...' : alreadyPresent ? 'Marked' : 'Mark Present'}
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
           </div>
-        </div>
-      )}
-
-      {!activeSession && (
-        <div className="card teacher-create-card">
-          <h2>Start New Session</h2>
-          <form onSubmit={createSession} className="mt-2 teacher-session-form">
-            <div className="form-group">
-              <label htmlFor="department-select">Department</label>
-              <select
-                id="department-select"
-                className="form-select"
-                value={selectedDepartment}
-                onChange={(e) => {
-                  setSelectedDepartment(e.target.value);
-                  setSelectedYear('');
-                  setSelectedSubject('');
-                }}
-                required
-              >
-                <option value="">Select department...</option>
-                {departments.map((department) => (
-                  <option key={department} value={department}>
-                    {department}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid-2">
-              <div className="form-group">
-                <label htmlFor="year-select">Year</label>
-                <select
-                  id="year-select"
-                  className="form-select"
-                  value={selectedYear}
-                  onChange={(e) => {
-                    setSelectedYear(e.target.value);
-                    setSelectedSubject('');
-                  }}
-                  disabled={!selectedDepartment}
-                  required
-                >
-                  <option value="">Select year...</option>
-                  {years.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="subject-select">Subject</label>
-                <select
-                  id="subject-select"
-                  className="form-select"
-                  value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
-                  disabled={!selectedYear}
-                  required
-                >
-                  <option value="">Select subject...</option>
-                  {subjects.map((subject) => (
-                    <option key={subject} value={subject}>
-                      {subject}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid-2">
-              <div className="form-group">
-                <label htmlFor="period">Period</label>
-                <select
-                  id="period"
-                  className="form-select"
-                  value={period}
-                  onChange={(e) => setPeriod(Number(e.target.value))}
-                >
-                  {[1, 2, 3, 4, 5, 6].map((slot) => (
-                    <option key={slot} value={slot}>
-                      Period {slot}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="session-date">Date</label>
-                <input
-                  id="session-date"
-                  type="date"
-                  className="form-input"
-                  value={today}
-                  readOnly
-                  aria-readonly="true"
-                  required
-                />
-                <p className="text-dim text-sm mt-1">Locked to today.</p>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary btn-block"
-              disabled={
-                loading ||
-                !selectedDepartment ||
-                !selectedYear ||
-                !selectedSubject
-              }
-            >
-              {loading ? 'Creating...' : 'Start Session & Generate Token'}
-            </button>
-          </form>
-        </div>
-      )}
-
-      <div className="card mt-3 teacher-history-card">
-        <h2>Session History</h2>
-        {sessions.length === 0 ? (
-          <p className="text-dim text-sm mt-1">No sessions yet</p>
-        ) : (
-          <>
-            <div className="history-filters mt-1">
-              <div className="history-filter-grid">
-                <div className="form-group">
-                  <label htmlFor="teacher-history-month">Month</label>
-                  <select
-                    id="teacher-history-month"
-                    className="form-select"
-                    value={historyMonthFilter}
-                    onChange={(e) => setHistoryMonthFilter(e.target.value)}
-                  >
-                    <option value="all">All Months</option>
-                    {historyMonthOptions.map((month) => (
-                      <option key={month} value={month}>{monthLabel(month)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="teacher-history-date">Date</label>
-                  <select
-                    id="teacher-history-date"
-                    className="form-select"
-                    value={historyDateFilter}
-                    onChange={(e) => setHistoryDateFilter(e.target.value)}
-                  >
-                    <option value="all">All Dates</option>
-                    {historyDateOptions.map((date) => (
-                      <option key={date} value={date}>{formatDisplayDate(date)}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {groupedHistorySessions.length === 0 ? (
-              <p className="text-dim text-sm">No sessions found for selected filters.</p>
-            ) : (
-              <div className="history-date-groups">
-                {groupedHistorySessions.map(([date, items], index) => (
-                  <details className="history-date-group" key={date} open={index === 0}>
-                    <summary className="history-date-summary">
-                      <span>{formatDisplayDate(date)}</span>
-                      <span className="history-date-count">{items.length} sessions</span>
-                    </summary>
-                    <div className="history-date-content">
-                      {items.map((session) => (
-                        <article className="history-entry" key={session.id}>
-                          <div className="history-entry-top">
-                            <h4>{session.classes?.subject || '-'}</h4>
-                            <span className="history-period-chip">P{session.period}</span>
-                          </div>
-                          <div className="history-entry-bottom">
-                            <span className={`badge badge-${session.status}`}>{session.status}</span>
-                            <div className="history-session-stats">
-                              <p className="history-session-present">
-                                Present: {session.attendance_summary?.present ?? 0}
-                                {` / `}
-                                {session.attendance_summary?.total ?? 0}
-                              </p>
-                              <div className="history-session-modes">
-                                <span className="history-mode-chip">
-                                  Bio: {session.attendance_summary?.biometric ?? 0}
-                                </span>
-                                <span className="history-mode-chip">
-                                  Manual: {session.attendance_summary?.manual_override ?? 0}
-                                </span>
-                                <span className="history-mode-chip">
-                                  Auto Absent: {session.attendance_summary?.auto_absent ?? 0}
-                                </span>
-                              </div>
-                              <div className="history-student-section">
-                                <p className="history-student-label">Present students</p>
-                                {historyPresentLoadingBySession[session.id] ? (
-                                  <p className="history-student-empty">Loading students...</p>
-                                ) : (historyPresentBySession[session.id] || []).length === 0 ? (
-                                  <p className="history-student-empty">No present students.</p>
-                                ) : (
-                                  <div className="history-student-list">
-                                    {(historyPresentBySession[session.id] || []).map((student) => (
-                                      <div className="history-student-item" key={`${session.id}-${student.student_id}`}>
-                                        <div className="history-student-meta">
-                                          <span className="history-student-name">{student.full_name}</span>
-                                          <span className="history-student-roll">{student.roll_number}</span>
-                                        </div>
-                                        <span className={`history-student-mode ${student.mode}`}>
-                                          {student.mode === 'manual_override'
-                                            ? 'Manual Override'
-                                            : student.mode === 'biometric'
-                                              ? 'Biometric'
-                                              : 'Unknown (Legacy)'}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            )}
-          </>
         )}
       </div>
     </div>

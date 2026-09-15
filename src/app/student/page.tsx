@@ -1,6 +1,6 @@
-﻿'use client';
+'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   browserSupportsWebAuthn,
   platformAuthenticatorIsAvailable,
@@ -12,13 +12,13 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
   calculateAttendancePercentage,
-  formatDisplayDate,
   getMonthKeyInTimeZone,
 } from '@/lib/utils';
 
 interface AttendanceRecord {
   id: string;
   status: string;
+  mark_mode?: string;
   marked_at: string;
   attendance_sessions: {
     session_date: string;
@@ -113,21 +113,36 @@ export default function StudentDashboard() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'history' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'checkin' | 'subjects' | 'leaderboard' | 'history' | 'profile'>('checkin');
   const [profileImage, setProfileImage] = useState<string>(DEFAULT_AVATARS[0]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [historyMonthFilter, setHistoryMonthFilter] = useState('all');
-  const [historyDateFilter, setHistoryDateFilter] = useState('all');
+  const [historyMonthFilter] = useState('all');
+  const [historyDateFilter] = useState('all');
+  const [qrTokenScanned, setQrTokenScanned] = useState(false);
+
   const leaderboardInFlightRef = useRef(false);
   const historyInFlightRef = useRef(false);
   const lastBackgroundRefreshAtRef = useRef(0);
   const authOptionsCacheRef = useRef<{ options: AuthRequestOptions; fetchedAt: number } | null>(null);
   const authOptionsInFlightRef = useRef<Promise<AuthRequestOptions> | null>(null);
 
-  async function loadLeaderboard(
+  // Auto-detect ?token=... query parameter from QR code scan
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tokenParam = params.get('token');
+      if (tokenParam && tokenParam.length === 4) {
+        setToken(tokenParam.toUpperCase());
+        setQrTokenScanned(true);
+        setSuccess('QR Code verified! Token loaded. Tap below to authenticate.');
+      }
+    }
+  }, []);
+
+  const loadLeaderboard = useCallback(async (
     userIdForCache?: string,
     options?: { silent?: boolean }
-  ) {
+  ) => {
     if (leaderboardInFlightRef.current) return;
     leaderboardInFlightRef.current = true;
     if (!options?.silent) setLeaderboardLoading(true);
@@ -150,9 +165,9 @@ export default function StudentDashboard() {
       if (!options?.silent) setLeaderboardLoading(false);
       leaderboardInFlightRef.current = false;
     }
-  }
+  }, [currentUserId]);
 
-  async function loadHistory(userIdForCache?: string) {
+  const loadHistory = useCallback(async (userIdForCache?: string) => {
     if (historyInFlightRef.current) return;
     historyInFlightRef.current = true;
     try {
@@ -171,12 +186,15 @@ export default function StudentDashboard() {
     } finally {
       historyInFlightRef.current = false;
     }
-  }
+  }, [currentUserId]);
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        router.push('/login');
+        return;
+      }
       setCurrentUserId(user.id);
 
       const cachedHistory = safeParseJson<AttendanceRecord[]>(
@@ -210,45 +228,7 @@ export default function StudentDashboard() {
       setProfileImage(localAvatar || p?.photo_path || DEFAULT_AVATARS[0]);
     }
     load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const triggerBackgroundRefresh = () => {
-      if (document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastBackgroundRefreshAtRef.current < 15000) return;
-      lastBackgroundRefreshAtRef.current = now;
-      void loadHistory();
-      void loadLeaderboard(undefined, { silent: true });
-    };
-
-    const intervalId = window.setInterval(() => {
-      triggerBackgroundRefresh();
-    }, 30000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const refreshNow = () => {
-      if (document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastBackgroundRefreshAtRef.current < 15000) return;
-      lastBackgroundRefreshAtRef.current = now;
-      void loadHistory();
-      void loadLeaderboard(undefined, { silent: true });
-    };
-
-    window.addEventListener('focus', refreshNow);
-    document.addEventListener('visibilitychange', refreshNow);
-
-    return () => {
-      window.removeEventListener('focus', refreshNow);
-      document.removeEventListener('visibilitychange', refreshNow);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase, router, loadHistory, loadLeaderboard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,32 +299,12 @@ export default function StudentDashboard() {
       }
 
       setHasBiometric(true);
-      setSuccess('Biometric setup complete. You can now mark attendance.');
+      setSuccess('Biometric passkey registered successfully! You can now mark attendance.');
     } catch (e: unknown) {
       setError(toErrorMessage(e, 'Failed to set up biometrics.'));
     } finally {
       setBiometricBusy(false);
     }
-  }
-
-  async function createBiometricAssertion(): Promise<unknown> {
-    if (!browserSupportsWebAuthn()) {
-      throw new Error('This browser does not support phone biometrics.');
-    }
-    requireBiometricSupport();
-
-    const maxOptionsAgeMs = 25_000;
-    const cachedOptions = authOptionsCacheRef.current;
-    const now = Date.now();
-    const isCacheFresh =
-      cachedOptions && now - cachedOptions.fetchedAt <= maxOptionsAgeMs;
-
-    if (isCacheFresh) {
-      return startAuthentication(cachedOptions.options);
-    }
-
-    const options = await fetchAuthenticationOptions();
-    return startAuthentication(options);
   }
 
   async function fetchAuthenticationOptions(force = false): Promise<AuthRequestOptions> {
@@ -389,11 +349,25 @@ export default function StudentDashboard() {
     }
   }
 
-  useEffect(() => {
-    if (!hasBiometric || biometricReady !== true) return;
-    if (token.length < 3) return;
-    void fetchAuthenticationOptions();
-  }, [hasBiometric, biometricReady, token]);
+  async function createBiometricAssertion(): Promise<unknown> {
+    if (!browserSupportsWebAuthn()) {
+      throw new Error('This browser does not support phone biometrics.');
+    }
+    requireBiometricSupport();
+
+    const maxOptionsAgeMs = 25_000;
+    const cachedOptions = authOptionsCacheRef.current;
+    const now = Date.now();
+    const isCacheFresh =
+      cachedOptions && now - cachedOptions.fetchedAt <= maxOptionsAgeMs;
+
+    if (isCacheFresh) {
+      return startAuthentication(cachedOptions.options);
+    }
+
+    const options = await fetchAuthenticationOptions();
+    return startAuthentication(options);
+  }
 
   async function submitAttendanceRequest(payload: { token: string; assertion: unknown }) {
     const controller = new AbortController();
@@ -464,11 +438,11 @@ export default function StudentDashboard() {
 
     try {
       if (!hasBiometric) {
-        throw new Error('Set up biometrics first.');
+        throw new Error('Please register your biometric passkey first.');
       }
 
       const assertion = await createBiometricAssertion();
-      const tokenValue = token.toUpperCase();
+      const tokenValue = token.toUpperCase().trim();
       const { res, data } = await submitAttendanceWithRetry({
         token: tokenValue,
         assertion,
@@ -482,12 +456,11 @@ export default function StudentDashboard() {
         throw new Error(errorMessage || 'Failed to submit attendance.');
       }
 
-      setSuccess('Attendance marked successfully.');
+      setSuccess('Attendance marked successfully! Verified with biometric passkey.');
       setToken('');
+      setQrTokenScanned(false);
       authOptionsCacheRef.current = null;
-      setLoading(false);
       void Promise.allSettled([loadHistory(), loadLeaderboard()]);
-      return;
     } catch (e: unknown) {
       setError(toErrorMessage(e, 'Failed to submit attendance.'));
     } finally {
@@ -495,14 +468,11 @@ export default function StudentDashboard() {
     }
   }
 
-  // Stats (monthly to match race leaderboard)
-  const currentLeaderboardEntry = useMemo(
-    () => leaderboard.find((entry) => entry.student_id === currentUserId),
-    [leaderboard, currentUserId]
-  );
+  // Monthly stats calculations
   const currentMonthKey = useMemo(() => {
     return getMonthKeyInTimeZone(new Date(), 'Asia/Kolkata');
   }, []);
+
   const monthlyRecords = useMemo(
     () =>
       records.filter((record) =>
@@ -514,6 +484,7 @@ export default function StudentDashboard() {
   const monthlyPresent = monthlyRecords.filter((r) => r.status === 'present').length;
   const monthlyPercentage = calculateAttendancePercentage(monthlyPresent, monthlyTotal);
 
+  // Synced leaderboard
   const syncedLeaderboard = useMemo(() => {
     if (!currentUserId) return leaderboard;
 
@@ -545,48 +516,25 @@ export default function StudentDashboard() {
     ];
   }, [leaderboard, currentUserId, monthlyTotal, monthlyPresent, monthlyPercentage, profile]);
 
-  const currentSyncedLeaderboardEntry = useMemo(
-    () => syncedLeaderboard.find((entry) => entry.student_id === currentUserId),
-    [syncedLeaderboard, currentUserId]
-  );
-  const total = currentSyncedLeaderboardEntry?.total ?? monthlyTotal;
-  const present = currentSyncedLeaderboardEntry?.present ?? monthlyPresent;
-  const percentage = currentSyncedLeaderboardEntry?.percentage ?? monthlyPercentage;
+  const userRankIndex = useMemo(() => {
+    const sorted = [...syncedLeaderboard].sort((a, b) => b.percentage - a.percentage || b.present - a.present);
+    return sorted.findIndex((s) => s.student_id === currentUserId) + 1;
+  }, [syncedLeaderboard, currentUserId]);
 
   // Subject-wise stats
-  const subjectMap = new Map<string, { total: number; present: number }>();
-  for (const r of records) {
-    const subject = r.attendance_sessions?.classes?.subject || '-';
-    const entry = subjectMap.get(subject) || { total: 0, present: 0 };
-    entry.total++;
-    if (r.status === 'present') entry.present++;
-    subjectMap.set(subject, entry);
-  }
-
-  const historyMonthOptions = useMemo(() => {
-    const months = new Set<string>();
-    for (const record of records) {
-      const date = record.attendance_sessions?.session_date;
-      if (date && date.length >= 7) months.add(date.slice(0, 7));
+  const subjectMap = useMemo(() => {
+    const map = new Map<string, { total: number; present: number }>();
+    for (const r of records) {
+      const subject = r.attendance_sessions?.classes?.subject || 'General';
+      const entry = map.get(subject) || { total: 0, present: 0 };
+      entry.total++;
+      if (r.status === 'present') entry.present++;
+      map.set(subject, entry);
     }
-    return Array.from(months).sort((left, right) => right.localeCompare(left));
+    return map;
   }, [records]);
 
-  const historyDateOptions = useMemo(() => {
-    const dates = new Set<string>();
-    for (const record of records) {
-      const date = record.attendance_sessions?.session_date;
-      if (!date) continue;
-      if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) continue;
-      dates.add(date);
-    }
-    return Array.from(dates).sort((left, right) => right.localeCompare(left));
-  }, [records, historyMonthFilter]);
-
-  useEffect(() => {
-    setHistoryDateFilter('all');
-  }, [historyMonthFilter]);
-
+  // Filtered History
   const filteredHistoryRecords = useMemo(() => {
     return records
       .filter((record) => {
@@ -603,17 +551,6 @@ export default function StudentDashboard() {
         return (left.attendance_sessions?.period || 0) - (right.attendance_sessions?.period || 0);
       });
   }, [records, historyMonthFilter, historyDateFilter]);
-
-  const groupedHistoryRecords = useMemo(() => {
-    const groups = new Map<string, AttendanceRecord[]>();
-    for (const record of filteredHistoryRecords) {
-      const date = record.attendance_sessions?.session_date || 'unknown';
-      const existing = groups.get(date) || [];
-      existing.push(record);
-      groups.set(date, existing);
-    }
-    return Array.from(groups.entries()).sort((left, right) => right[0].localeCompare(left[0]));
-  }, [filteredHistoryRecords]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -642,325 +579,502 @@ export default function StudentDashboard() {
       .eq('id', currentUserId);
 
     if (updateError) {
-      setError('Profile image changed locally, but sync failed. Please try again.');
+      setError('Profile image changed locally, but sync failed.');
       return;
     }
 
     await loadLeaderboard();
-    setSuccess('Profile image updated.');
-    setError('');
-  }
-
-  function onGalleryPick(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = typeof reader.result === 'string' ? reader.result : '';
-      if (!value) {
-        setError('Unable to read selected image.');
-        return;
-      }
-      void saveProfileImage(value);
-    };
-    reader.onerror = () => {
-      setError('Unable to read selected image.');
-    };
-    reader.readAsDataURL(file);
+    setSuccess('Profile avatar updated.');
   }
 
   return (
-    <div className="page student-app-shell">
-      <div className="student-app-header">
-        <div className="student-app-brand">
-          <Image
-            src={profileImage}
-            alt="Profile"
-            className="student-app-avatar"
-            width={40}
-            height={40}
-            unoptimized
-          />
-          <span>{profile?.full_name || 'Student'}</span>
-        </div>
-        <button
-          className="student-app-gear"
-          onClick={() => setActiveTab('profile')}
-          title="Open profile"
-          aria-label="Open profile"
-          type="button"
-        >
-          <svg viewBox="0 0 24 24" className="student-app-gear-icon" aria-hidden="true">
-            <path
-              d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5Zm0 2c-4.42 0-8 2.69-8 6v2h16v-2c0-3.31-3.58-6-8-6Z"
-              fill="currentColor"
-            />
-          </svg>
-        </button>
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
-
-      {activeTab === 'dashboard' && (
-        <>
-          <section className="student-status-strip">
-            <div className="student-status-icon">Live</div>
-            <div>
-              <h3>Biometric Status</h3>
-              <p>{hasBiometric ? 'Biometric is active' : 'Biometric setup required'}</p>
-            </div>
-            <span className={`student-status-dot ${hasBiometric ? 'on' : 'off'}`} />
-          </section>
-
-          {!hasBiometric && (
-            <button
-              type="button"
-              className="btn btn-outline btn-block mt-1"
-              onClick={registerBiometric}
-              disabled={biometricBusy || biometricReady !== true}
-            >
-              {biometricBusy ? 'Setting up...' : 'Set Up Biometrics'}
-            </button>
-          )}
-
-          <section className="student-attendance-hero mt-2">
-            <h2>Mark Attendance</h2>
-            <p>Enter the 4-digit token provided by your professor</p>
-            <form onSubmit={submitAttendance}>
-              <label htmlFor="token-input" className="student-token-grid" aria-label="4 digit token">
-                {[0, 1, 2, 3].map((index) => (
-                  <span key={index} className="student-token-box">
-                    {token[index] || '*'}
-                  </span>
-                ))}
-                <input
-                  id="token-input"
-                  type="text"
-                  className="student-token-hidden-input"
-                  placeholder="A3F2"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))}
-                  maxLength={4}
-                  required
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="btn btn-primary btn-block student-submit-btn"
-                disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
-              >
-                {loading ? 'Submitting...' : 'Verify & Submit'}
-              </button>
-            </form>
-          </section>
-
-          <section className="student-kpi-grid mt-2">
-            <article className="student-kpi-card light">
-              <strong>{percentage}%</strong>
-              <p>This Month Attendance ({monthLabel(currentMonthKey)})</p>
-            </article>
-            <article className="student-kpi-card dark">
-              <strong>{percentage >= 75 ? 'Good Standing' : 'Low Attendance'}</strong>
-              <p>{percentage >= 75 ? 'Monthly Target Met' : 'Monthly Target Missed'}</p>
-            </article>
-          </section>
-
-          <section className="student-section mt-2">
-            <div className="student-section-headline">
-              <h2>Subject Performance</h2>
-            </div>
-            <div className="student-performance-card">
-              {Array.from(subjectMap.entries()).map(([subject, stats]) => {
-                const pct = Math.round((stats.present / stats.total) * 100);
-                return (
-                  <div key={subject} className="student-performance-row">
-                    <div>
-                      <h3>{subject}</h3>
-                      <p>{stats.present} / {stats.total} Classes</p>
-                    </div>
-                    <span className={`student-performance-chip ${pct < 75 ? 'low' : ''}`}>{pct}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="student-section mt-2">
-            <div className="student-section-headline">
-              <h2>Recent Logs</h2>
-            </div>
-            <div className="student-log-list">
-              {records.slice(0, 3).map((record) => (
-                <article key={record.id} className="student-log-item">
-                  <div className="student-log-date">{formatDisplayDate(record.attendance_sessions?.session_date || '-')}</div>
-                  <div className="student-log-main">
-                    <h3>{record.attendance_sessions?.classes?.subject || '-'}</h3>
-                    <p>Period {record.attendance_sessions?.period || '-'}</p>
-                  </div>
-                  <span className={`student-log-status ${record.status === 'present' ? 'present' : 'absent'}`}>
-                    {record.status.toUpperCase()}
-                  </span>
-                </article>
-              ))}
-            </div>
-          </section>
-        </>
-      )}
-
-      {activeTab === 'subjects' && (
-        <section className="card student-leaderboard mt-2">
-          <div className="student-section-headline">
-            <h2>Race to #1 (This Month)</h2>
-            <p className="student-race-copy">Beat the class average and climb the rank table.</p>
-            <button className="btn btn-outline btn-sm" onClick={() => void loadLeaderboard()} type="button">
-              Refresh
-            </button>
+    <div className="viewport-app">
+      {/* Top Header Navigation */}
+      <header className="viewport-header">
+        <div className="header-brand">
+          <div className="brand-badge">
+            <span className="badge-dot pulse-emerald"></span>
+            NOVA STUDENT
           </div>
-          {leaderboardLoading ? (
-            <p className="text-dim text-sm mt-1">Loading leaderboard...</p>
-          ) : (
-            <div className="leaderboard-list mt-1">
-              {syncedLeaderboard.map((entry, index) => (
-                <article key={entry.student_id} className="leaderboard-item">
-                  <div className="leaderboard-rank">#{index + 1}</div>
-                  <div className="leaderboard-main">
-                    <h3>{entry.full_name}</h3>
-                    <p className="text-dim text-sm">{entry.roll_number || 'No roll number'}</p>
-                  </div>
-                  <div className={`leaderboard-score ${entry.percentage < 75 ? 'low' : ''}`}>{entry.percentage}%</div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+          <div className="header-title-group">
+            <h1>{profile?.full_name || 'Student Portal'}</h1>
+            <span className="text-secondary text-xs">
+              Roll No: {profile?.roll_number || 'Enrolled'} • {monthLabel(currentMonthKey)}
+            </span>
+          </div>
+        </div>
 
-      {activeTab === 'history' && (
-        <section className="card mt-2">
-          <h2>Attendance History</h2>
-          {records.length === 0 ? (
-            <p className="text-dim text-sm mt-1">No records yet</p>
-          ) : (
-            <>
-              <div className="history-filters mt-1">
-                <div className="history-filter-grid">
-                  <div className="form-group">
-                    <label htmlFor="student-history-month">Month</label>
-                    <select
-                      id="student-history-month"
-                      className="form-select"
-                      value={historyMonthFilter}
-                      onChange={(e) => setHistoryMonthFilter(e.target.value)}
-                    >
-                      <option value="all">All Months</option>
-                      {historyMonthOptions.map((month) => (
-                        <option key={month} value={month}>{monthLabel(month)}</option>
-                      ))}
-                    </select>
+        <div className="header-actions">
+          {/* Biometric Status Chip */}
+          <div className="session-status-pill active">
+            <span className={`live-indicator ${hasBiometric ? '' : 'badge-absent'}`}></span>
+            <span className="font-semibold text-xs text-slate-700">
+              {hasBiometric ? 'Passkey Ready' : 'Setup Passkey'}
+            </span>
+          </div>
+
+          <div className="header-divider"></div>
+
+          {/* Tab Navigation */}
+          <nav className="mode-toggle-pill">
+            <button
+              onClick={() => setActiveTab('checkin')}
+              className={`toggle-tab ${activeTab === 'checkin' ? 'active' : ''}`}
+            >
+              🎯 Check-In
+            </button>
+            <button
+              onClick={() => setActiveTab('subjects')}
+              className={`toggle-tab ${activeTab === 'subjects' ? 'active' : ''}`}
+            >
+              📊 Subjects
+            </button>
+            <button
+              onClick={() => setActiveTab('leaderboard')}
+              className={`toggle-tab ${activeTab === 'leaderboard' ? 'active' : ''}`}
+            >
+              🏆 Leaderboard
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`toggle-tab ${activeTab === 'history' ? 'active' : ''}`}
+            >
+              📜 History
+            </button>
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={`toggle-tab ${activeTab === 'profile' ? 'active' : ''}`}
+            >
+              ⚙️ Profile
+            </button>
+          </nav>
+
+          <button onClick={handleLogout} className="btn-header btn-header-danger">
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      {/* Main Viewport Content */}
+      <div className="viewport-content">
+        {/* Banner Notifications */}
+        {error && (
+          <div className="alert-banner alert-banner-error">
+            <span>⚠️ {error}</span>
+            <button onClick={() => setError('')} className="alert-close">×</button>
+          </div>
+        )}
+        {success && (
+          <div className="alert-banner alert-banner-success">
+            <span>{success}</span>
+            <button onClick={() => setSuccess('')} className="alert-close">×</button>
+          </div>
+        )}
+
+        {/* TAB 1: CHECK-IN / DASHBOARD OVERVIEW */}
+        {activeTab === 'checkin' && (
+          <div className="viewport-grid grid-3col">
+            {/* Bento Col 1: Fast Biometric Check-in */}
+            <section className="bento-card col-controls">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Attendance Check-In</h2>
+                  <p className="card-subtitle">
+                    {qrTokenScanned ? '⚡ QR Code Auto-Detected' : 'Enter 4-digit code or scan QR'}
+                  </p>
+                </div>
+                {qrTokenScanned && <span className="badge-present">QR Scanned</span>}
+              </div>
+
+              {!hasBiometric && (
+                <div className="security-notice-box mb-3">
+                  <div className="security-notice-header">
+                    <span>⚠️ Passkey Registration Required</span>
                   </div>
-                  <div className="form-group">
-                    <label htmlFor="student-history-date">Date</label>
-                    <select
-                      id="student-history-date"
-                      className="form-select"
-                      value={historyDateFilter}
-                      onChange={(e) => setHistoryDateFilter(e.target.value)}
-                    >
-                      <option value="all">All Dates</option>
-                      {historyDateOptions.map((date) => (
-                        <option key={date} value={date}>{formatDisplayDate(date)}</option>
-                      ))}
-                    </select>
+                  <p className="text-xs text-slate-500 mb-2">
+                    Pair your device Face ID / Fingerprint once to mark 1-tap attendance.
+                  </p>
+                  <button
+                    onClick={registerBiometric}
+                    disabled={biometricBusy || biometricReady !== true}
+                    className="btn-primary w-full text-xs font-semibold py-2"
+                  >
+                    {biometricBusy ? 'Registering...' : '🔐 Setup Biometric Passkey'}
+                  </button>
+                </div>
+              )}
+
+              <form onSubmit={submitAttendance} className="control-form">
+                <div className="form-group">
+                  <label className="form-label text-center">Enter 4-Digit Classroom PIN</label>
+                  <div className="token-input-boxes">
+                    {[0, 1, 2, 3].map((index) => (
+                      <span
+                        key={index}
+                        className={`token-digit-cell ${token[index] ? 'filled' : ''}`}
+                      >
+                        {token[index] || '•'}
+                      </span>
+                    ))}
+                  </div>
+
+                  <input
+                    type="text"
+                    className="token-hidden-real-input"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))}
+                    maxLength={4}
+                    placeholder="Enter 4-digit PIN"
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
+                  className="btn-primary w-full py-3.5 text-sm font-bold shadow-md"
+                >
+                  {loading ? '🔐 Authenticating Passkey...' : '⚡ Verify & Mark Attendance'}
+                </button>
+              </form>
+
+              <div className="quick-archive-section mt-auto">
+                <div className="section-label">Device Security Health</div>
+                <div className="text-xs text-slate-500 space-y-1">
+                  <div className="flex justify-between">
+                    <span>WebAuthn Ready:</span>
+                    <span className="font-semibold text-emerald-600">{biometricReady ? 'Yes ✓' : 'Checking...'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Anti-Spoofing:</span>
+                    <span className="font-semibold text-emerald-600">Hardware Level</span>
                   </div>
                 </div>
               </div>
+            </section>
 
-              {groupedHistoryRecords.length === 0 ? (
-                <p className="text-dim text-sm">No sessions found for selected filters.</p>
-              ) : (
-                <div className="history-date-groups">
-                  {groupedHistoryRecords.map(([date, items], index) => (
-                    <details className="history-date-group" key={date} open={index === 0}>
-                      <summary className="history-date-summary">
-                        <span>{formatDisplayDate(date)}</span>
-                        <span className="history-date-count">{items.length} classes</span>
-                      </summary>
-                      <div className="history-date-content">
-                        {items.map((item) => (
-                          <article className="history-entry" key={item.id}>
-                            <div className="history-entry-top">
-                              <h4>{item.attendance_sessions?.classes?.subject || '-'}</h4>
-                              <span className="history-period-chip">P{item.attendance_sessions?.period || '-'}</span>
+            {/* Bento Col 2: Attendance Standing & Metrics */}
+            <section className="bento-card col-broadcast">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Monthly Standing</h2>
+                  <p className="card-subtitle">{monthLabel(currentMonthKey)} Overview</p>
+                </div>
+                <span className={`badge-light font-bold ${monthlyPercentage >= 75 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>
+                  {monthlyPercentage >= 75 ? '✓ Good Standing' : '⚠️ Defaulter Risk (<75%)'}
+                </span>
+              </div>
+
+              <div className="broadcast-hero">
+                {/* Big Metric Radial / Box */}
+                <div className="attendance-metric-display">
+                  <div className="attendance-percentage-huge font-mono">
+                    {monthlyPercentage}
+                    <span className="percentage-sign">%</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-500 mt-1">
+                    {monthlyPresent} Present / {monthlyTotal} Total Lectures Recorded
+                  </p>
+                </div>
+
+                {/* Subject Highlights Grid */}
+                <div className="w-full mt-4">
+                  <div className="section-label text-left mb-2">Subject Performance Summary</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Array.from(subjectMap.entries()).slice(0, 4).map(([subj, st]) => {
+                      const pct = Math.round((st.present / st.total) * 100);
+                      return (
+                        <div key={subj} className="subject-mini-card">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-semibold text-xs text-slate-700 truncate">{subj}</span>
+                            <span className={`text-xs font-bold ${pct >= 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {pct}%
+                            </span>
+                          </div>
+                          <div className="progress-bar-container">
+                            <div
+                              className={`progress-bar-fill ${pct < 75 ? 'bg-amber-500' : ''}`}
+                              style={{ width: `${pct}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Bento Col 3: Race to #1 Leaderboard */}
+            <section className="bento-card col-roster">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Race to #1 Podium</h2>
+                  <p className="card-subtitle">Top attendance in your cohort</p>
+                </div>
+                <span className="badge-light">Rank #{userRankIndex || '-'}</span>
+              </div>
+
+              <div className="roster-list-container">
+                {leaderboardLoading ? (
+                  <p className="text-xs text-slate-400 p-4 text-center">Loading leaderboard...</p>
+                ) : (
+                  syncedLeaderboard.slice(0, 10).map((entry, idx) => {
+                    const isMe = entry.student_id === currentUserId;
+                    const rankMedal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                    return (
+                      <div
+                        key={entry.student_id}
+                        className={`student-roster-row ${isMe ? 'row-highlighted-user' : ''}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="rank-badge-text font-bold text-xs">{rankMedal}</span>
+                          <div className="student-meta">
+                            <div className="student-name">
+                              {entry.full_name} {isMe && '(You)'}
                             </div>
-                            <div className="history-entry-bottom">
-                              <span className={`badge badge-${item.status}`}>{item.status}</span>
-                            </div>
-                          </article>
-                        ))}
+                            <div className="student-roll">{entry.roll_number || 'Student'}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-700">
+                            {entry.percentage}%
+                          </span>
+                        </div>
                       </div>
-                    </details>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* TAB 2: SUBJECTS BREAKDOWN */}
+        {activeTab === 'subjects' && (
+          <div className="archive-view-container">
+            <div className="bento-card archive-card">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Subject Attendance Breakdown</h2>
+                  <p className="card-subtitle">Detailed subject metrics and criteria</p>
+                </div>
+                <span className="badge-light">{subjectMap.size} Subjects</span>
+              </div>
+
+              <div className="archive-table-container">
+                <table className="archive-table">
+                  <thead>
+                    <tr>
+                      <th>Subject Name</th>
+                      <th>Total Sessions</th>
+                      <th>Attended</th>
+                      <th>Missed</th>
+                      <th>Percentage</th>
+                      <th>Academic Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from(subjectMap.entries()).map(([subj, stats]) => {
+                      const pct = Math.round((stats.present / stats.total) * 100);
+                      const missed = stats.total - stats.present;
+                      return (
+                        <tr key={subj}>
+                          <td className="font-bold text-slate-800">{subj}</td>
+                          <td>{stats.total}</td>
+                          <td className="font-semibold text-emerald-600">{stats.present}</td>
+                          <td className="text-rose-500">{missed}</td>
+                          <td>
+                            <span className={`font-bold font-mono ${pct >= 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {pct}%
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`status-badge-sm ${pct >= 75 ? 'badge-active' : 'badge-closed'}`}>
+                              {pct >= 75 ? 'Eligible for Exams' : 'Attendance Shortage'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: LEADERBOARD FULL VIEW */}
+        {activeTab === 'leaderboard' && (
+          <div className="archive-view-container">
+            <div className="bento-card archive-card">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Cohort Attendance Leaderboard</h2>
+                  <p className="card-subtitle">Monthly rankings for {monthLabel(currentMonthKey)}</p>
+                </div>
+                <span className="badge-light">Your Rank: #{userRankIndex}</span>
+              </div>
+
+              <div className="archive-table-container">
+                <table className="archive-table">
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Student Name</th>
+                      <th>Roll Number</th>
+                      <th>Present Count</th>
+                      <th>Total Sessions</th>
+                      <th>Attendance Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {syncedLeaderboard.map((entry, idx) => {
+                      const isMe = entry.student_id === currentUserId;
+                      return (
+                        <tr key={entry.student_id} className={isMe ? 'bg-indigo-50/60 font-semibold' : ''}>
+                          <td>
+                            {idx === 0 ? '🥇 1st' : idx === 1 ? '🥈 2nd' : idx === 2 ? '🥉 3rd' : `#${idx + 1}`}
+                          </td>
+                          <td className="font-semibold text-slate-800">
+                            {entry.full_name} {isMe && <span className="badge-present text-[10px] ml-1">YOU</span>}
+                          </td>
+                          <td className="font-mono text-xs">{entry.roll_number || '-'}</td>
+                          <td className="text-emerald-600 font-semibold">{entry.present}</td>
+                          <td>{entry.total}</td>
+                          <td>
+                            <span className="font-mono font-bold text-indigo-700">{entry.percentage}%</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: HISTORY LOGS */}
+        {activeTab === 'history' && (
+          <div className="archive-view-container">
+            <div className="bento-card archive-card">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Full Attendance Log</h2>
+                  <p className="card-subtitle">Chronological record of every session</p>
+                </div>
+                <span className="badge-light">{filteredHistoryRecords.length} Records</span>
+              </div>
+
+              <div className="archive-table-container">
+                <table className="archive-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Period</th>
+                      <th>Subject & Section</th>
+                      <th>Status</th>
+                      <th>Verification Mode</th>
+                      <th>Marked At</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredHistoryRecords.map((r) => {
+                      const isPresent = r.status === 'present';
+                      return (
+                        <tr key={r.id}>
+                          <td className="font-mono text-xs">{r.attendance_sessions?.session_date}</td>
+                          <td>Period {r.attendance_sessions?.period}</td>
+                          <td className="font-semibold text-slate-800">
+                            {r.attendance_sessions?.classes?.subject || 'Class'}
+                          </td>
+                          <td>
+                            <span className={`status-badge-sm ${isPresent ? 'badge-active' : 'badge-closed'}`}>
+                              {isPresent ? '✓ Present' : '✗ Absent'}
+                            </span>
+                          </td>
+                          <td className="text-xs text-slate-500">
+                            {r.mark_mode === 'manual_override' ? '✍️ Manual Teacher Override' : '🔐 Biometric Passkey'}
+                          </td>
+                          <td className="text-xs text-slate-400 font-mono">
+                            {r.marked_at ? new Date(r.marked_at).toLocaleTimeString() : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: PROFILE & CUSTOMIZATION */}
+        {activeTab === 'profile' && (
+          <div className="archive-view-container max-w-xl mx-auto">
+            <div className="bento-card p-6">
+              <h2 className="card-title mb-4">Student Profile & Biometric Settings</h2>
+
+              <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <Image
+                  src={profileImage}
+                  alt="Profile Avatar"
+                  width={64}
+                  height={64}
+                  className="rounded-full border-2 border-indigo-500 bg-white shadow"
+                  unoptimized
+                />
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">{profile?.full_name || 'Student'}</h3>
+                  <p className="text-xs text-slate-500 font-mono">Roll: {profile?.roll_number || 'N/A'}</p>
+                  <p className="text-xs text-emerald-600 font-medium mt-0.5">
+                    {hasBiometric ? '✓ WebAuthn Passkey Active' : '⚠️ Biometrics Not Registered'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="form-label mb-2">Choose Avatar</label>
+                <div className="flex gap-2 flex-wrap">
+                  {DEFAULT_AVATARS.map((avatar, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => saveProfileImage(avatar)}
+                      className={`p-1 rounded-full border-2 transition-all ${profileImage === avatar ? 'border-indigo-600 scale-110 shadow-sm' : 'border-transparent hover:border-slate-300'}`}
+                    >
+                      <Image
+                        src={avatar}
+                        alt="Avatar Option"
+                        width={42}
+                        height={42}
+                        className="rounded-full"
+                        unoptimized
+                      />
+                    </button>
                   ))}
                 </div>
-              )}
-            </>
-          )}
-        </section>
-      )}
+              </div>
 
-      {activeTab === 'profile' && (
-        <section className="card student-profile-panel mt-2">
-          <h2>Profile Image</h2>
-          <p className="text-dim text-sm mt-1">Choose an avatar or pick one from your gallery.</p>
-          <div className="student-profile-preview-wrap">
-            <Image
-              src={profileImage}
-              alt="Selected profile"
-              className="student-profile-preview"
-              width={96}
-              height={96}
-              unoptimized
-            />
-            <p className="text-sm mt-1">{profile?.full_name || 'Student'}</p>
-          </div>
-          <div className="student-avatar-grid mt-2">
-            {DEFAULT_AVATARS.map((avatar) => (
-              <button
-                key={avatar}
-                type="button"
-                className={`student-avatar-option ${profileImage === avatar ? 'active' : ''}`}
-                onClick={() => void saveProfileImage(avatar)}
-              >
-                <Image src={avatar} alt="Avatar option" width={48} height={48} unoptimized />
-              </button>
-            ))}
-          </div>
-          <div className="mt-2">
-            <label htmlFor="gallery-avatar" className="btn btn-outline">Choose From Gallery</label>
-            <input id="gallery-avatar" type="file" accept="image/*" onChange={onGalleryPick} className="student-gallery-input" />
-          </div>
-          <div className="mt-2">
-            <button type="button" className="btn btn-outline btn-block" onClick={handleLogout}>
-              Log Out
-            </button>
-          </div>
-        </section>
-      )}
+              <div className="border-t border-slate-200 pt-4">
+                <button
+                  onClick={registerBiometric}
+                  disabled={biometricBusy || biometricReady !== true}
+                  className="btn-secondary w-full py-2.5 text-xs font-semibold mb-2"
+                >
+                  {biometricBusy ? 'Registering...' : '🔄 Re-register Biometric Passkey'}
+                </button>
 
-      <nav className="student-bottom-nav" aria-label="Student navigation">
-        <button type="button" className={`student-bottom-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-        <button type="button" className={`student-bottom-item ${activeTab === 'subjects' ? 'active' : ''}`} onClick={() => setActiveTab('subjects')}>Race</button>
-        <button type="button" className={`student-bottom-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>History</button>
-        <button type="button" className={`student-bottom-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>Profile</button>
-      </nav>
+                <button onClick={handleLogout} className="btn-danger w-full py-2.5 text-xs font-semibold">
+                  🚪 Sign Out of Student Account
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
