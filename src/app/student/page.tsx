@@ -113,11 +113,9 @@ export default function StudentDashboard() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'checkin' | 'subjects' | 'leaderboard' | 'history' | 'profile'>('checkin');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'leaderboard' | 'history' | 'profile'>('dashboard');
   const [profileImage, setProfileImage] = useState<string>(DEFAULT_AVATARS[0]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [historyMonthFilter] = useState('all');
-  const [historyDateFilter] = useState('all');
   const [qrTokenScanned, setQrTokenScanned] = useState(false);
 
   const leaderboardInFlightRef = useRef(false);
@@ -126,7 +124,7 @@ export default function StudentDashboard() {
   const authOptionsCacheRef = useRef<{ options: AuthRequestOptions; fetchedAt: number } | null>(null);
   const authOptionsInFlightRef = useRef<Promise<AuthRequestOptions> | null>(null);
 
-  // Auto-detect ?token=... query parameter from QR code scan
+  // Auto-detect ?token=... from QR code scan
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -438,7 +436,7 @@ export default function StudentDashboard() {
 
     try {
       if (!hasBiometric) {
-        throw new Error('Please register your biometric passkey first.');
+        throw new Error('Please set up your biometric passkey first.');
       }
 
       const assertion = await createBiometricAssertion();
@@ -456,7 +454,7 @@ export default function StudentDashboard() {
         throw new Error(errorMessage || 'Failed to submit attendance.');
       }
 
-      setSuccess('Attendance marked successfully! Verified with biometric passkey.');
+      setSuccess('🎉 Attendance marked successfully! Verified with biometric passkey.');
       setToken('');
       setQrTokenScanned(false);
       authOptionsCacheRef.current = null;
@@ -534,24 +532,6 @@ export default function StudentDashboard() {
     return map;
   }, [records]);
 
-  // Filtered History
-  const filteredHistoryRecords = useMemo(() => {
-    return records
-      .filter((record) => {
-        const date = record.attendance_sessions?.session_date || '';
-        if (historyMonthFilter !== 'all' && !date.startsWith(historyMonthFilter)) return false;
-        if (historyDateFilter !== 'all' && date !== historyDateFilter) return false;
-        return true;
-      })
-      .sort((left, right) => {
-        const leftDate = left.attendance_sessions?.session_date || '';
-        const rightDate = right.attendance_sessions?.session_date || '';
-        const dateCompare = rightDate.localeCompare(leftDate);
-        if (dateCompare !== 0) return dateCompare;
-        return (left.attendance_sessions?.period || 0) - (right.attendance_sessions?.period || 0);
-      });
-  }, [records, historyMonthFilter, historyDateFilter]);
-
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/login');
@@ -579,7 +559,7 @@ export default function StudentDashboard() {
       .eq('id', currentUserId);
 
     if (updateError) {
-      setError('Profile image changed locally, but sync failed.');
+      setError('Profile avatar update failed.');
       return;
     }
 
@@ -588,493 +568,312 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="viewport-app">
-      {/* Top Header Navigation */}
-      <header className="viewport-header">
-        <div className="header-brand">
-          <div className="brand-badge">
-            <span className="badge-dot pulse-emerald"></span>
-            NOVA STUDENT
-          </div>
-          <div className="header-title-group">
+    <div className="page">
+      {/* Top Mobile Header */}
+      <div className="page-header">
+        <div className="flex items-center gap-1">
+          <Image
+            src={profileImage}
+            alt="Profile Avatar"
+            width={38}
+            height={38}
+            className="roster-avatar"
+            unoptimized
+          />
+          <div className="brand-header-wrap">
             <h1>{profile?.full_name || 'Student Portal'}</h1>
-            <span className="text-secondary text-xs">
-              Roll No: {profile?.roll_number || 'Enrolled'} • {monthLabel(currentMonthKey)}
+            <span className="user-info">
+              {profile?.roll_number ? `Roll ${profile.roll_number}` : 'Enrolled'} • {monthLabel(currentMonthKey)}
             </span>
           </div>
         </div>
 
-        <div className="header-actions">
-          {/* Biometric Status Chip */}
-          <div className="session-status-pill active">
-            <span className={`live-indicator ${hasBiometric ? '' : 'badge-absent'}`}></span>
-            <span className="font-semibold text-xs text-slate-700">
-              {hasBiometric ? 'Passkey Ready' : 'Setup Passkey'}
-            </span>
-          </div>
+        <button
+          className="btn btn-outline btn-sm"
+          onClick={() => setActiveTab(activeTab === 'profile' ? 'dashboard' : 'profile')}
+        >
+          {activeTab === 'profile' ? 'Done' : '⚙️ Profile'}
+        </button>
+      </div>
 
-          <div className="header-divider"></div>
+      {/* Banner Alerts */}
+      {error && <div className="alert alert-error">⚠️ {error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
 
-          {/* Tab Navigation */}
-          <nav className="mode-toggle-pill">
-            <button
-              onClick={() => setActiveTab('checkin')}
-              className={`toggle-tab ${activeTab === 'checkin' ? 'active' : ''}`}
-            >
-              🎯 Check-In
-            </button>
-            <button
-              onClick={() => setActiveTab('subjects')}
-              className={`toggle-tab ${activeTab === 'subjects' ? 'active' : ''}`}
-            >
-              📊 Subjects
-            </button>
-            <button
-              onClick={() => setActiveTab('leaderboard')}
-              className={`toggle-tab ${activeTab === 'leaderboard' ? 'active' : ''}`}
-            >
-              🏆 Leaderboard
-            </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`toggle-tab ${activeTab === 'history' ? 'active' : ''}`}
-            >
-              📜 History
-            </button>
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={`toggle-tab ${activeTab === 'profile' ? 'active' : ''}`}
-            >
-              ⚙️ Profile
-            </button>
-          </nav>
-
-          <button onClick={handleLogout} className="btn-header btn-header-danger">
-            Sign Out
-          </button>
-        </div>
-      </header>
-
-      {/* Main Viewport Content */}
-      <div className="viewport-content">
-        {/* Banner Notifications */}
-        {error && (
-          <div className="alert-banner alert-banner-error">
-            <span>⚠️ {error}</span>
-            <button onClick={() => setError('')} className="alert-close">×</button>
-          </div>
-        )}
-        {success && (
-          <div className="alert-banner alert-banner-success">
-            <span>{success}</span>
-            <button onClick={() => setSuccess('')} className="alert-close">×</button>
-          </div>
-        )}
-
-        {/* TAB 1: CHECK-IN / DASHBOARD OVERVIEW */}
-        {activeTab === 'checkin' && (
-          <div className="viewport-grid grid-3col">
-            {/* Bento Col 1: Fast Biometric Check-in */}
-            <section className="bento-card col-controls">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Attendance Check-In</h2>
-                  <p className="card-subtitle">
-                    {qrTokenScanned ? '⚡ QR Code Auto-Detected' : 'Enter 4-digit code or scan QR'}
-                  </p>
-                </div>
-                {qrTokenScanned && <span className="badge-present">QR Scanned</span>}
+      {activeTab === 'dashboard' ? (
+        <>
+          {/* BIOMETRIC STATUS STRIP */}
+          <div className="card">
+            <div className="flex-between">
+              <div>
+                <h3>Biometric Passkey</h3>
+                <p className="card-meta">
+                  {hasBiometric ? '✓ Active & Verified on this device' : '⚠️ Setup required to mark attendance'}
+                </p>
               </div>
+              <span className={`badge ${hasBiometric ? 'badge-present' : 'badge-absent'}`}>
+                {hasBiometric ? 'ACTIVE' : 'REQUIRED'}
+              </span>
+            </div>
 
-              {!hasBiometric && (
-                <div className="security-notice-box mb-3">
-                  <div className="security-notice-header">
-                    <span>⚠️ Passkey Registration Required</span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-2">
-                    Pair your device Face ID / Fingerprint once to mark 1-tap attendance.
-                  </p>
-                  <button
-                    onClick={registerBiometric}
-                    disabled={biometricBusy || biometricReady !== true}
-                    className="btn-primary w-full text-xs font-semibold py-2"
+            {!hasBiometric && (
+              <button
+                type="button"
+                className="btn btn-primary btn-block mt-2"
+                onClick={registerBiometric}
+                disabled={biometricBusy || biometricReady !== true}
+              >
+                {biometricBusy ? 'Setting up Passkey...' : '🔐 Set Up Biometric Passkey'}
+              </button>
+            )}
+          </div>
+
+          {/* ATTENDANCE CHECK-IN CARD */}
+          <div className="card">
+            <div className="card-header">
+              <h2>Mark Attendance</h2>
+              {qrTokenScanned && <span className="badge badge-present">QR Scanned</span>}
+            </div>
+            <p className="text-dim text-sm">
+              {qrTokenScanned
+                ? 'PIN loaded from QR code. Tap verify to submit.'
+                : 'Enter the 4-digit PIN broadcasted by your professor.'}
+            </p>
+
+            <form onSubmit={submitAttendance}>
+              <label htmlFor="student-token-field" className="student-token-grid">
+                {[0, 1, 2, 3].map((index) => (
+                  <span
+                    key={index}
+                    className={`student-token-box ${token[index] ? 'active' : ''}`}
                   >
-                    {biometricBusy ? 'Registering...' : '🔐 Setup Biometric Passkey'}
-                  </button>
-                </div>
+                    {token[index] || '•'}
+                  </span>
+                ))}
+                <input
+                  id="student-token-field"
+                  type="text"
+                  className="student-token-hidden-input"
+                  placeholder="A3F2"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))}
+                  maxLength={4}
+                  required
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="btn btn-primary btn-block"
+                disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
+              >
+                {loading ? '🔐 Authenticating...' : '⚡ Verify & Submit Biometrics'}
+              </button>
+            </form>
+          </div>
+
+          {/* MONTHLY KPI STANDING */}
+          <div className="student-kpi-grid">
+            <div className="student-kpi-card">
+              <strong>{monthlyPercentage}%</strong>
+              <p>This Month ({monthLabel(currentMonthKey)})</p>
+              <div className="progress-track">
+                <div
+                  className={`progress-bar-fill ${monthlyPercentage < 75 ? 'danger' : ''}`}
+                  style={{ width: `${monthlyPercentage}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div className="student-kpi-card">
+              <strong className={monthlyPercentage >= 75 ? 'text-emerald-700' : 'text-rose-700'}>
+                {monthlyPercentage >= 75 ? 'Good Standing' : 'Defaulter Risk'}
+              </strong>
+              <p>{monthlyPresent} of {monthlyTotal} classes attended</p>
+            </div>
+          </div>
+
+          {/* SUBJECT BREAKDOWN CARD */}
+          <div className="card">
+            <div className="card-header">
+              <h2>Subject Performance</h2>
+              <span className="badge badge-active">{subjectMap.size} Subjects</span>
+            </div>
+
+            <div className="flex-col">
+              {Array.from(subjectMap.entries()).map(([subject, stats]) => {
+                const pct = Math.round((stats.present / stats.total) * 100);
+                return (
+                  <div key={subject} className="student-performance-row">
+                    <div className="flex-1 min-w-0 pr-2">
+                      <div className="roster-name-text">{subject}</div>
+                      <div className="text-dim text-sm">
+                        {stats.present} / {stats.total} Classes
+                      </div>
+                      <div className="progress-track">
+                        <div
+                          className={`progress-bar-fill ${pct < 75 ? 'warning' : ''}`}
+                          style={{ width: `${pct}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <span className={`badge ${pct >= 75 ? 'badge-present' : 'badge-absent'}`}>
+                      {pct}%
+                    </span>
+                  </div>
+                );
+              })}
+              {subjectMap.size === 0 && (
+                <p className="text-dim text-sm text-center py-3">No subjects recorded yet</p>
               )}
+            </div>
+          </div>
 
-              <form onSubmit={submitAttendance} className="control-form">
-                <div className="form-group">
-                  <label className="form-label text-center">Enter 4-Digit Classroom PIN</label>
-                  <div className="token-input-boxes">
-                    {[0, 1, 2, 3].map((index) => (
-                      <span
-                        key={index}
-                        className={`token-digit-cell ${token[index] ? 'filled' : ''}`}
-                      >
-                        {token[index] || '•'}
-                      </span>
-                    ))}
-                  </div>
+          {/* RACE TO #1 LEADERBOARD CARD */}
+          <div className="card">
+            <div className="card-header">
+              <h2>Race to #1 Leaderboard</h2>
+              <span className="badge badge-present">Rank #{userRankIndex || '-'}</span>
+            </div>
 
-                  <input
-                    type="text"
-                    className="token-hidden-real-input"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))}
-                    maxLength={4}
-                    placeholder="Enter 4-digit PIN"
-                    autoFocus
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
-                  className="btn-primary w-full py-3.5 text-sm font-bold shadow-md"
-                >
-                  {loading ? '🔐 Authenticating Passkey...' : '⚡ Verify & Mark Attendance'}
-                </button>
-              </form>
-
-              <div className="quick-archive-section mt-auto">
-                <div className="section-label">Device Security Health</div>
-                <div className="text-xs text-slate-500 space-y-1">
-                  <div className="flex justify-between">
-                    <span>WebAuthn Ready:</span>
-                    <span className="font-semibold text-emerald-600">{biometricReady ? 'Yes ✓' : 'Checking...'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Anti-Spoofing:</span>
-                    <span className="font-semibold text-emerald-600">Hardware Level</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Bento Col 2: Attendance Standing & Metrics */}
-            <section className="bento-card col-broadcast">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Monthly Standing</h2>
-                  <p className="card-subtitle">{monthLabel(currentMonthKey)} Overview</p>
-                </div>
-                <span className={`badge-light font-bold ${monthlyPercentage >= 75 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>
-                  {monthlyPercentage >= 75 ? '✓ Good Standing' : '⚠️ Defaulter Risk (<75%)'}
-                </span>
-              </div>
-
-              <div className="broadcast-hero">
-                {/* Big Metric Radial / Box */}
-                <div className="attendance-metric-display">
-                  <div className="attendance-percentage-huge font-mono">
-                    {monthlyPercentage}
-                    <span className="percentage-sign">%</span>
-                  </div>
-                  <p className="text-xs font-semibold text-slate-500 mt-1">
-                    {monthlyPresent} Present / {monthlyTotal} Total Lectures Recorded
-                  </p>
-                </div>
-
-                {/* Subject Highlights Grid */}
-                <div className="w-full mt-4">
-                  <div className="section-label text-left mb-2">Subject Performance Summary</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Array.from(subjectMap.entries()).slice(0, 4).map(([subj, st]) => {
-                      const pct = Math.round((st.present / st.total) * 100);
-                      return (
-                        <div key={subj} className="subject-mini-card">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-semibold text-xs text-slate-700 truncate">{subj}</span>
-                            <span className={`text-xs font-bold ${pct >= 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                              {pct}%
-                            </span>
+            <div className="roster-list">
+              {leaderboardLoading ? (
+                <p className="text-dim text-sm text-center py-3">Loading leaderboard...</p>
+              ) : (
+                syncedLeaderboard.slice(0, 10).map((entry, idx) => {
+                  const isMe = entry.student_id === currentUserId;
+                  const rankIcon = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                  return (
+                    <div
+                      key={entry.student_id}
+                      className="roster-row"
+                      style={isMe ? { background: 'var(--surface-2)', borderColor: 'var(--primary)' } : {}}
+                    >
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-sm">{rankIcon}</span>
+                        <div className="roster-name-col">
+                          <div className="roster-name-text">
+                            {entry.full_name} {isMe && '(You)'}
                           </div>
-                          <div className="progress-bar-container">
-                            <div
-                              className={`progress-bar-fill ${pct < 75 ? 'bg-amber-500' : ''}`}
-                              style={{ width: `${pct}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Bento Col 3: Race to #1 Leaderboard */}
-            <section className="bento-card col-roster">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Race to #1 Podium</h2>
-                  <p className="card-subtitle">Top attendance in your cohort</p>
-                </div>
-                <span className="badge-light">Rank #{userRankIndex || '-'}</span>
-              </div>
-
-              <div className="roster-list-container">
-                {leaderboardLoading ? (
-                  <p className="text-xs text-slate-400 p-4 text-center">Loading leaderboard...</p>
-                ) : (
-                  syncedLeaderboard.slice(0, 10).map((entry, idx) => {
-                    const isMe = entry.student_id === currentUserId;
-                    const rankMedal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
-                    return (
-                      <div
-                        key={entry.student_id}
-                        className={`student-roster-row ${isMe ? 'row-highlighted-user' : ''}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="rank-badge-text font-bold text-xs">{rankMedal}</span>
-                          <div className="student-meta">
-                            <div className="student-name">
-                              {entry.full_name} {isMe && '(You)'}
-                            </div>
-                            <div className="student-roll">{entry.roll_number || 'Student'}</div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-slate-700">
-                            {entry.percentage}%
-                          </span>
+                          <div className="roster-roll-text">{entry.roll_number || 'Student'}</div>
                         </div>
                       </div>
+
+                      <span className="font-mono font-bold text-sm">
+                        {entry.percentage}%
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* RECENT ATTENDANCE LOG */}
+          <div className="card">
+            <div className="card-header">
+              <h2>Recent Attendance Log</h2>
+              <span className="badge badge-closed">{records.length} Total</span>
+            </div>
+
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Period</th>
+                    <th>Subject</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.slice(0, 6).map((r) => {
+                    const isPresent = r.status === 'present';
+                    return (
+                      <tr key={r.id}>
+                        <td className="font-mono text-sm">{r.attendance_sessions?.session_date}</td>
+                        <td>P{r.attendance_sessions?.period}</td>
+                        <td className="font-bold">{r.attendance_sessions?.classes?.subject || 'Class'}</td>
+                        <td>
+                          <span className={`badge ${isPresent ? 'badge-present' : 'badge-absent'}`}>
+                            {isPresent ? 'Present' : 'Absent'}
+                          </span>
+                        </td>
+                      </tr>
                     );
-                  })
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* TAB 2: SUBJECTS BREAKDOWN */}
-        {activeTab === 'subjects' && (
-          <div className="archive-view-container">
-            <div className="bento-card archive-card">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Subject Attendance Breakdown</h2>
-                  <p className="card-subtitle">Detailed subject metrics and criteria</p>
-                </div>
-                <span className="badge-light">{subjectMap.size} Subjects</span>
-              </div>
-
-              <div className="archive-table-container">
-                <table className="archive-table">
-                  <thead>
+                  })}
+                  {records.length === 0 && (
                     <tr>
-                      <th>Subject Name</th>
-                      <th>Total Sessions</th>
-                      <th>Attended</th>
-                      <th>Missed</th>
-                      <th>Percentage</th>
-                      <th>Academic Status</th>
+                      <td colSpan={4} className="text-center text-dim">No records found</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {Array.from(subjectMap.entries()).map(([subj, stats]) => {
-                      const pct = Math.round((stats.present / stats.total) * 100);
-                      const missed = stats.total - stats.present;
-                      return (
-                        <tr key={subj}>
-                          <td className="font-bold text-slate-800">{subj}</td>
-                          <td>{stats.total}</td>
-                          <td className="font-semibold text-emerald-600">{stats.present}</td>
-                          <td className="text-rose-500">{missed}</td>
-                          <td>
-                            <span className={`font-bold font-mono ${pct >= 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                              {pct}%
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`status-badge-sm ${pct >= 75 ? 'badge-active' : 'badge-closed'}`}>
-                              {pct >= 75 ? 'Eligible for Exams' : 'Attendance Shortage'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
+        </>
+      ) : (
+        /* PROFILE CUSTOMIZATION VIEW */
+        <div className="card">
+          <div className="card-header">
+            <h2>Profile Settings</h2>
+            <button className="btn btn-outline btn-sm" onClick={() => setActiveTab('dashboard')}>
+              Back
+            </button>
+          </div>
 
-        {/* TAB 3: LEADERBOARD FULL VIEW */}
-        {activeTab === 'leaderboard' && (
-          <div className="archive-view-container">
-            <div className="bento-card archive-card">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Cohort Attendance Leaderboard</h2>
-                  <p className="card-subtitle">Monthly rankings for {monthLabel(currentMonthKey)}</p>
-                </div>
-                <span className="badge-light">Your Rank: #{userRankIndex}</span>
-              </div>
-
-              <div className="archive-table-container">
-                <table className="archive-table">
-                  <thead>
-                    <tr>
-                      <th>Rank</th>
-                      <th>Student Name</th>
-                      <th>Roll Number</th>
-                      <th>Present Count</th>
-                      <th>Total Sessions</th>
-                      <th>Attendance Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {syncedLeaderboard.map((entry, idx) => {
-                      const isMe = entry.student_id === currentUserId;
-                      return (
-                        <tr key={entry.student_id} className={isMe ? 'bg-indigo-50/60 font-semibold' : ''}>
-                          <td>
-                            {idx === 0 ? '🥇 1st' : idx === 1 ? '🥈 2nd' : idx === 2 ? '🥉 3rd' : `#${idx + 1}`}
-                          </td>
-                          <td className="font-semibold text-slate-800">
-                            {entry.full_name} {isMe && <span className="badge-present text-[10px] ml-1">YOU</span>}
-                          </td>
-                          <td className="font-mono text-xs">{entry.roll_number || '-'}</td>
-                          <td className="text-emerald-600 font-semibold">{entry.present}</td>
-                          <td>{entry.total}</td>
-                          <td>
-                            <span className="font-mono font-bold text-indigo-700">{entry.percentage}%</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+          <div className="flex items-center gap-2 mb-2 p-3 rounded-2xl bg-[#faf6ee] border border-stone-200">
+            <Image
+              src={profileImage}
+              alt="Avatar"
+              width={56}
+              height={56}
+              className="rounded-full bg-white border border-stone-300"
+              unoptimized
+            />
+            <div>
+              <h3 className="text-base font-bold">{profile?.full_name || 'Student'}</h3>
+              <p className="text-dim text-sm">Roll: {profile?.roll_number || 'N/A'}</p>
             </div>
           </div>
-        )}
 
-        {/* TAB 4: HISTORY LOGS */}
-        {activeTab === 'history' && (
-          <div className="archive-view-container">
-            <div className="bento-card archive-card">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Full Attendance Log</h2>
-                  <p className="card-subtitle">Chronological record of every session</p>
-                </div>
-                <span className="badge-light">{filteredHistoryRecords.length} Records</span>
-              </div>
-
-              <div className="archive-table-container">
-                <table className="archive-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Period</th>
-                      <th>Subject & Section</th>
-                      <th>Status</th>
-                      <th>Verification Mode</th>
-                      <th>Marked At</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredHistoryRecords.map((r) => {
-                      const isPresent = r.status === 'present';
-                      return (
-                        <tr key={r.id}>
-                          <td className="font-mono text-xs">{r.attendance_sessions?.session_date}</td>
-                          <td>Period {r.attendance_sessions?.period}</td>
-                          <td className="font-semibold text-slate-800">
-                            {r.attendance_sessions?.classes?.subject || 'Class'}
-                          </td>
-                          <td>
-                            <span className={`status-badge-sm ${isPresent ? 'badge-active' : 'badge-closed'}`}>
-                              {isPresent ? '✓ Present' : '✗ Absent'}
-                            </span>
-                          </td>
-                          <td className="text-xs text-slate-500">
-                            {r.mark_mode === 'manual_override' ? '✍️ Manual Teacher Override' : '🔐 Biometric Passkey'}
-                          </td>
-                          <td className="text-xs text-slate-400 font-mono">
-                            {r.marked_at ? new Date(r.marked_at).toLocaleTimeString() : '-'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: PROFILE & CUSTOMIZATION */}
-        {activeTab === 'profile' && (
-          <div className="archive-view-container max-w-xl mx-auto">
-            <div className="bento-card p-6">
-              <h2 className="card-title mb-4">Student Profile & Biometric Settings</h2>
-
-              <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <Image
-                  src={profileImage}
-                  alt="Profile Avatar"
-                  width={64}
-                  height={64}
-                  className="rounded-full border-2 border-indigo-500 bg-white shadow"
-                  unoptimized
-                />
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">{profile?.full_name || 'Student'}</h3>
-                  <p className="text-xs text-slate-500 font-mono">Roll: {profile?.roll_number || 'N/A'}</p>
-                  <p className="text-xs text-emerald-600 font-medium mt-0.5">
-                    {hasBiometric ? '✓ WebAuthn Passkey Active' : '⚠️ Biometrics Not Registered'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className="form-label mb-2">Choose Avatar</label>
-                <div className="flex gap-2 flex-wrap">
-                  {DEFAULT_AVATARS.map((avatar, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => saveProfileImage(avatar)}
-                      className={`p-1 rounded-full border-2 transition-all ${profileImage === avatar ? 'border-indigo-600 scale-110 shadow-sm' : 'border-transparent hover:border-slate-300'}`}
-                    >
-                      <Image
-                        src={avatar}
-                        alt="Avatar Option"
-                        width={42}
-                        height={42}
-                        className="rounded-full"
-                        unoptimized
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="border-t border-slate-200 pt-4">
+          <div className="mb-2">
+            <label className="font-bold text-sm text-dim block mb-1">Select Avatar</label>
+            <div className="flex gap-1 flex-wrap">
+              {DEFAULT_AVATARS.map((avatar, idx) => (
                 <button
-                  onClick={registerBiometric}
-                  disabled={biometricBusy || biometricReady !== true}
-                  className="btn-secondary w-full py-2.5 text-xs font-semibold mb-2"
+                  key={idx}
+                  onClick={() => saveProfileImage(avatar)}
+                  className={`p-1 rounded-full border-2 transition-all ${profileImage === avatar ? 'border-emerald-700 scale-110' : 'border-transparent'}`}
                 >
-                  {biometricBusy ? 'Registering...' : '🔄 Re-register Biometric Passkey'}
+                  <Image
+                    src={avatar}
+                    alt="Avatar"
+                    width={40}
+                    height={40}
+                    className="rounded-full"
+                    unoptimized
+                  />
                 </button>
-
-                <button onClick={handleLogout} className="btn-danger w-full py-2.5 text-xs font-semibold">
-                  🚪 Sign Out of Student Account
-                </button>
-              </div>
+              ))}
             </div>
           </div>
-        )}
-      </div>
+
+          <div className="mt-3">
+            <button
+              onClick={registerBiometric}
+              disabled={biometricBusy || biometricReady !== true}
+              className="btn btn-secondary btn-block mb-1"
+            >
+              {biometricBusy ? 'Registering...' : '🔄 Re-register Biometric Passkey'}
+            </button>
+
+            <button onClick={handleLogout} className="btn btn-danger btn-block">
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

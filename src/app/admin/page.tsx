@@ -32,15 +32,16 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<AdminStudent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [defaulterOnly, setDefaulterOnly] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
-  // New Student Modal / Form State
+  // New Student Form State
   const [newRollNumber, setNewRollNumber] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newYear, setNewYear] = useState<(typeof YEAR_OPTIONS)[number]>('1');
   const [newPassword, setNewPassword] = useState('demo123456');
 
   const title = useMemo(
-    () => (department ? `${department} Department HOD Hub` : 'HOD Command Center'),
+    () => (department ? `${department} HOD Hub` : 'HOD Admin'),
     [department]
   );
 
@@ -93,11 +94,12 @@ export default function AdminDashboard() {
       }
 
       setSuccess(
-        `✓ Student enrolled: ${data.student.full_name} (${data.student.roll_number})`
+        `✓ Enrolled: ${data.student.full_name} (${data.student.roll_number})`
       );
       setNewRollNumber('');
       setNewFullName('');
       setNewPassword('demo123456');
+      setShowAddForm(false);
 
       await loadStudents(selectedYear, selectedMonth);
     } catch (submitError) {
@@ -119,7 +121,6 @@ export default function AdminDashboard() {
     window.location.href = `/api/admin/students/export?year=${selectedYear}&month=${selectedMonth}`;
   }
 
-  // Filtered student list
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
       const matchesSearch =
@@ -131,287 +132,191 @@ export default function AdminDashboard() {
     });
   }, [students, searchQuery, defaulterOnly]);
 
-  // Analytics
-  const totalCount = students.length;
   const defaulterCount = students.filter((s) => s.attendance_percentage < 75).length;
-  const highPerformersCount = students.filter((s) => s.attendance_percentage >= 90).length;
-  const avgAttendance = totalCount > 0
-    ? Math.round(students.reduce((acc, s) => acc + s.attendance_percentage, 0) / totalCount)
+  const avgAttendance = students.length > 0
+    ? Math.round(students.reduce((acc, s) => acc + s.attendance_percentage, 0) / students.length)
     : 0;
 
   return (
-    <div className="viewport-app">
-      {/* Top Header Bar */}
-      <header className="viewport-header">
-        <div className="header-brand">
-          <div className="brand-badge">
-            <span className="badge-dot pulse-emerald"></span>
-            HOD COMMAND
-          </div>
-          <div className="header-title-group">
-            <h1>{title}</h1>
-            <span className="text-secondary text-xs">
-              Logged in as {adminName || 'Department Head'} • Year {selectedYear} Cohort
-            </span>
-          </div>
+    <div className="page">
+      {/* Top Mobile Header */}
+      <div className="page-header">
+        <div className="brand-header-wrap">
+          <h1>{title}</h1>
+          <span className="user-info">{adminName || 'Department Head'} • Year {selectedYear}</span>
+        </div>
+        <button className="btn btn-outline btn-sm" onClick={handleLogout}>
+          Sign Out
+        </button>
+      </div>
+
+      {/* Banner Alerts */}
+      {error && <div className="alert alert-error">⚠️ {error}</div>}
+      {success && <div className="alert alert-success">✅ {success}</div>}
+
+      {/* COHORT YEAR FILTER PILLS */}
+      <div className="filter-pill-bar">
+        {YEAR_OPTIONS.map((yr) => (
+          <button
+            key={yr}
+            onClick={() => setSelectedYear(yr)}
+            className={`filter-pill-btn ${selectedYear === yr ? 'active' : ''}`}
+          >
+            Year {yr}
+          </button>
+        ))}
+      </div>
+
+      {/* KPI STATS CARD */}
+      <div className="student-kpi-grid">
+        <div className="student-kpi-card">
+          <strong>{avgAttendance}%</strong>
+          <p>Cohort Avg Attendance</p>
+        </div>
+        <div className="student-kpi-card">
+          <strong className={defaulterCount > 0 ? 'text-rose-700' : 'text-emerald-700'}>
+            {defaulterCount}
+          </strong>
+          <p>Defaulters (&lt;75% Attendance)</p>
+        </div>
+      </div>
+
+      {/* DEFAULTER QUICK FILTER TOGGLE */}
+      <button
+        onClick={() => setDefaulterOnly(!defaulterOnly)}
+        className={`defaulter-toggle-btn ${defaulterOnly ? 'active' : ''}`}
+        type="button"
+      >
+        <span>🚨 Defaulters Shortlist Filter</span>
+        <span className={`badge ${defaulterOnly ? 'badge-absent' : 'badge-closed'}`}>
+          {defaulterOnly ? 'FILTER ACTIVE' : `${defaulterCount} flagged`}
+        </span>
+      </button>
+
+      {/* ENROLL STUDENT ACCORDION */}
+      <div className="card">
+        <div className="card-header">
+          <h2>Enroll Student</h2>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={() => setShowAddForm(!showAddForm)}
+            type="button"
+          >
+            {showAddForm ? 'Cancel' : '+ New'}
+          </button>
         </div>
 
-        <div className="header-actions">
-          {/* Cohort Year Pills */}
-          <div className="mode-toggle-pill">
-            {YEAR_OPTIONS.map((yr) => (
-              <button
-                key={yr}
-                onClick={() => setSelectedYear(yr)}
-                className={`toggle-tab ${selectedYear === yr ? 'active' : ''}`}
+        {showAddForm && (
+          <form onSubmit={addStudent} className="mt-1">
+            <div className="form-group">
+              <label>Roll Number</label>
+              <input
+                type="text"
+                className="form-input font-mono"
+                placeholder="e.g. IT2401"
+                value={newRollNumber}
+                onChange={(e) => setNewRollNumber(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Full Name</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. Alex Johnson"
+                value={newFullName}
+                onChange={(e) => setNewFullName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Academic Year</label>
+              <select
+                value={newYear}
+                onChange={(e) => setNewYear(e.target.value as (typeof YEAR_OPTIONS)[number])}
+                className="form-select"
               >
-                Year {yr}
-              </button>
-            ))}
+                {YEAR_OPTIONS.map((yr) => (
+                  <option key={yr} value={yr}>
+                    Year {yr}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Initial Password</label>
+              <input
+                type="text"
+                className="form-input font-mono"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !newRollNumber || !newFullName}
+              className="btn btn-primary btn-block"
+            >
+              {loading ? 'Enrolling...' : 'Enroll Student'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* MASTER STUDENT ROSTER */}
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <h2>Cohort Roster</h2>
+            <p className="card-meta">
+              Showing {filteredStudents.length} of {students.length} students
+            </p>
           </div>
-
-          <div className="header-divider"></div>
-
-          <button onClick={downloadCsv} className="btn-header" title="Export CSV Report">
-            📥 Export Report
-          </button>
-
-          <button onClick={handleLogout} className="btn-header btn-header-danger">
-            Sign Out
+          <button className="btn btn-outline btn-sm" onClick={downloadCsv} type="button">
+            📥 Export CSV
           </button>
         </div>
-      </header>
 
-      {/* Main Viewport Content */}
-      <div className="viewport-content">
-        {/* Banner Notifications */}
-        {error && (
-          <div className="alert-banner alert-banner-error">
-            <span>⚠️ {error}</span>
-            <button onClick={() => setError('')} className="alert-close">×</button>
-          </div>
-        )}
-        {success && (
-          <div className="alert-banner alert-banner-success">
-            <span>{success}</span>
-            <button onClick={() => setSuccess('')} className="alert-close">×</button>
-          </div>
-        )}
+        <div className="form-group">
+          <input
+            type="text"
+            placeholder="Search student or roll number..."
+            className="form-input"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
 
-        <div className="viewport-grid grid-admin">
-          {/* LEFT BENTO: Analytics & Student Enrollment */}
-          <div className="bento-col">
-            {/* KPI Summary Card */}
-            <section className="bento-card">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Cohort Overview</h2>
-                  <p className="card-subtitle">Year {selectedYear} Attendance KPIs</p>
-                </div>
-                <span className="badge-light">{selectedMonth}</span>
-              </div>
-
-              <div className="p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="stat-card-clean">
-                    <span className="stat-label">Total Students</span>
-                    <span className="stat-val text-slate-800">{totalCount}</span>
-                  </div>
-                  <div className="stat-card-clean">
-                    <span className="stat-label">Cohort Average</span>
-                    <span className={`stat-val ${avgAttendance >= 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {avgAttendance}%
-                    </span>
-                  </div>
-                  <div className="stat-card-clean">
-                    <span className="stat-label">Defaulters (&lt;75%)</span>
-                    <span className={`stat-val ${defaulterCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      {defaulterCount}
-                    </span>
-                  </div>
-                  <div className="stat-card-clean">
-                    <span className="stat-label">Top Performers</span>
-                    <span className="stat-val text-indigo-600">{highPerformersCount}</span>
-                  </div>
+        <div className="roster-list">
+          {filteredStudents.map((s) => {
+            const isDefaulter = s.attendance_percentage < 75;
+            return (
+              <div
+                key={s.student_id}
+                className="roster-row"
+                style={isDefaulter ? { borderLeft: '4px solid var(--danger)', background: 'var(--danger-light)' } : {}}
+              >
+                <div className="roster-name-col">
+                  <div className="roster-name-text font-bold">{s.full_name}</div>
+                  <div className="roster-roll-text">{s.roll_number} • {s.total_attendance}/{s.total_sessions} classes</div>
                 </div>
 
-                {/* Defaulter Quick Filter Toggle */}
-                <button
-                  onClick={() => setDefaulterOnly(!defaulterOnly)}
-                  className={`w-full py-2 px-3 rounded-lg text-xs font-semibold border transition-all flex items-center justify-between ${
-                    defaulterOnly
-                      ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <span>🚨 Defaulters Shortlist Filter</span>
-                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${defaulterOnly ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
-                    {defaulterOnly ? 'ACTIVE' : `${defaulterCount} flagged`}
-                  </span>
-                </button>
+                <span className={`badge ${isDefaulter ? 'badge-absent' : 'badge-present'}`}>
+                  {s.attendance_percentage}%
+                </span>
               </div>
-            </section>
+            );
+          })}
 
-            {/* Enroll New Student Card */}
-            <section className="bento-card bento-card-flex">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Enroll New Student</h2>
-                  <p className="card-subtitle">Add to {department || 'Department'}</p>
-                </div>
-              </div>
-
-              <div className="p-4 overflow-y-auto">
-                <form onSubmit={addStudent} className="control-form">
-                  <div className="form-group">
-                    <label className="form-label">Roll Number</label>
-                    <input
-                      type="text"
-                      className="form-input font-mono"
-                      placeholder="e.g. IT2401"
-                      value={newRollNumber}
-                      onChange={(e) => setNewRollNumber(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Full Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Alex Johnson"
-                      value={newFullName}
-                      onChange={(e) => setNewFullName(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group flex-1">
-                      <label className="form-label">Academic Year</label>
-                      <select
-                        value={newYear}
-                        onChange={(e) => setNewYear(e.target.value as (typeof YEAR_OPTIONS)[number])}
-                        className="form-select"
-                      >
-                        {YEAR_OPTIONS.map((yr) => (
-                          <option key={yr} value={yr}>
-                            Year {yr}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="form-group flex-1">
-                      <label className="form-label">Default Password</label>
-                      <input
-                        type="text"
-                        className="form-input font-mono bg-slate-50 text-slate-500"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading || !newRollNumber || !newFullName}
-                    className="btn-primary w-full py-2.5 text-xs font-semibold shadow-sm"
-                  >
-                    {loading ? 'Enrolling...' : '+ Enroll Student'}
-                  </button>
-                </form>
-              </div>
-            </section>
-          </div>
-
-          {/* RIGHT BENTO: Master Cohort Roster */}
-          <section className="bento-card col-broadcast">
-            <div className="card-header">
-              <div>
-                <h2 className="card-title">Student Cohort Master Roster</h2>
-                <p className="card-subtitle">
-                  Showing {filteredStudents.length} of {students.length} enrolled students
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Search input */}
-                <input
-                  type="text"
-                  placeholder="Search name or roll..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="roster-search-input py-1 px-2.5 text-xs rounded-lg border border-slate-200"
-                />
-
-                {/* Month input */}
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="py-1 px-2 text-xs rounded-lg border border-slate-200 bg-white font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="archive-table-container">
-              <table className="archive-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Roll Number</th>
-                    <th>Full Name</th>
-                    <th>Attended / Total</th>
-                    <th>Attendance %</th>
-                    <th>Academic Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.map((s, index) => {
-                    const isDefaulter = s.attendance_percentage < 75;
-                    return (
-                      <tr key={s.student_id} className={isDefaulter ? 'bg-rose-50/40' : ''}>
-                        <td className="text-slate-400 font-mono text-xs">{index + 1}</td>
-                        <td className="font-mono font-bold text-slate-800">{s.roll_number}</td>
-                        <td className="font-medium text-slate-800">{s.full_name}</td>
-                        <td className="font-mono text-xs font-semibold">
-                          <span className="text-emerald-600">{s.total_attendance}</span> / {s.total_sessions}
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <span className={`font-mono font-bold text-xs ${isDefaulter ? 'text-rose-600' : 'text-emerald-600'}`}>
-                              {s.attendance_percentage}%
-                            </span>
-                            <div className="w-16 progress-bar-container">
-                              <div
-                                className={`progress-bar-fill ${isDefaulter ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                                style={{ width: `${s.attendance_percentage}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`status-badge-sm ${isDefaulter ? 'badge-closed' : 'badge-active'}`}>
-                            {isDefaulter ? '⚠️ Defaulter (<75%)' : '✓ Good Standing'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredStudents.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-8 text-slate-400 text-xs">
-                        {loading ? 'Loading cohort data...' : 'No matching students found in this cohort.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          {filteredStudents.length === 0 && (
+            <p className="text-dim text-sm text-center py-4">No matching students found</p>
+          )}
         </div>
       </div>
     </div>
