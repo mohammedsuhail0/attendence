@@ -8,68 +8,10 @@ import {
   TOKEN_VALIDITY_SECONDS,
 } from '@/lib/utils';
 
-async function closeSessionAndMarkAbsent(
-  admin: ReturnType<typeof createAdminClient>,
-  {
-    sessionId,
-    classId,
-    teacherId,
-  }: {
-    sessionId: string;
-    classId: string;
-    teacherId: string;
-  }
-) {
-  await admin
-    .from('attendance_sessions')
-    .update({ status: 'closed' })
-    .eq('id', sessionId);
-
-  const { data: enrollments } = await admin
-    .from('enrollments')
-    .select('student_id')
-    .eq('class_id', classId);
-
-  const { data: presentRecords } = await admin
-    .from('attendance_records')
-    .select('student_id')
-    .eq('session_id', sessionId);
-
-  const presentIds = new Set((presentRecords ?? []).map((r) => r.student_id));
-  const absentStudents = (enrollments ?? [])
-    .filter((e) => !presentIds.has(e.student_id))
-    .map((e) => ({
-      session_id: sessionId,
-      student_id: e.student_id,
-      status: 'absent' as const,
-      mark_mode: 'auto_absent' as const,
-      marked_by: teacherId,
-    }));
-
-  if (absentStudents.length === 0) return;
-
-  const { error: insertError } = await admin
-    .from('attendance_records')
-    .insert(absentStudents);
-
-  if (!insertError) return;
-
-  const isLegacySchema =
-    String(insertError.message).includes('mark_mode') ||
-    String(insertError.message).includes('marked_by');
-
-  if (!isLegacySchema) return;
-
-  const fallbackRows = absentStudents.map((row) => ({
-    session_id: row.session_id,
-    student_id: row.student_id,
-    status: row.status,
-  }));
-
-  await admin
-    .from('attendance_records')
-    .insert(fallbackRows);
-}
+import {
+  closeSessionAndMarkAbsent,
+  isSessionExpiredByAge,
+} from '@/lib/session-lifecycle';
 
 export async function POST(request: Request) {
   try {
@@ -199,15 +141,14 @@ export async function GET() {
     }
 
     const today = getDateStringInTimeZone();
-    const fourHoursAgoMs = Date.now() - 4 * 60 * 60 * 1000;
     const staleActiveSessions = sessions.filter(
       (session) =>
         session.status === 'active' &&
         (session.session_date < today ||
-          new Date(session.created_at).getTime() < fourHoursAgoMs)
+          isSessionExpiredByAge(session.created_at))
     );
 
-    // Any active session left over from a previous day or abandoned for >4 hours is stale.
+    // Any active session left over from a previous day or open for >= 30 mins is stale.
     if (staleActiveSessions.length > 0) {
       await Promise.all(
         staleActiveSessions.map((session) =>

@@ -181,21 +181,47 @@ export default function TeacherDashboard() {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/manual-override`);
       const data = await res.json();
-      if (res.ok && data.students) {
-        setRoster(data.students);
+      if (res.ok) {
+        if (data.students) {
+          setRoster(data.students);
+        }
+        if (data.session_status === 'closed') {
+          setActiveSession(null);
+          setToken('');
+          setTimeLeft(0);
+          if (timerRef.current) clearInterval(timerRef.current);
+          const res2 = await fetch('/api/sessions');
+          const d2 = await res2.json();
+          if (d2.sessions) setSessions(d2.sessions);
+        }
       }
     } catch (e) {
       console.error('Error fetching roster:', e);
     }
   }, []);
 
-  // Live polling when session is active
+  // Live polling and background 30-minute auto-close check when session is active
   useEffect(() => {
     if (!activeSession || activeSession.status === 'closed') return;
 
     fetchRoster(activeSession.id);
     const interval = setInterval(() => {
       fetchRoster(activeSession.id);
+
+      const createdMs = new Date(activeSession.created_at).getTime();
+      if (!isNaN(createdMs) && Date.now() - createdMs >= 30 * 60 * 1000) {
+        fetch(`/api/sessions/${activeSession.id}/close`, { method: 'POST' }).catch(() => {});
+        setActiveSession(null);
+        setToken('');
+        setTimeLeft(0);
+        if (timerRef.current) clearInterval(timerRef.current);
+        fetch('/api/sessions')
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.sessions) setSessions(d.sessions);
+          })
+          .catch(() => {});
+      }
     }, 3000);
 
     return () => clearInterval(interval);

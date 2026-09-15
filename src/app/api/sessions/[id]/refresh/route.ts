@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateToken, TOKEN_VALIDITY_SECONDS } from '@/lib/utils';
 import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  closeSessionAndMarkAbsent,
+  isSessionExpiredByAge,
+} from '@/lib/session-lifecycle';
 
 export async function POST(
   _request: Request,
@@ -19,13 +23,24 @@ export async function POST(
     // Verify ownership
     const { data: session } = await supabase
       .from('attendance_sessions')
-      .select('id, status, teacher_id')
+      .select('id, status, teacher_id, created_at, class_id')
       .eq('id', id)
       .eq('teacher_id', user.id)
       .single();
 
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+
+    const admin = createAdminClient();
+
+    if (session.status === 'active' && isSessionExpiredByAge(session.created_at)) {
+      await closeSessionAndMarkAbsent(admin, {
+        sessionId: session.id,
+        classId: session.class_id,
+        teacherId: user.id,
+      });
+      return NextResponse.json({ error: 'Session is closed' }, { status: 400 });
     }
 
     if (session.status === 'closed') {

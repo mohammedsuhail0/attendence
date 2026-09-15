@@ -6,6 +6,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { SubmitAttendanceSchema } from '@/lib/schemas/attendance';
 import { rateLimit, isTokenExpired } from '@/lib/utils';
 import { getWebAuthnConfig, parseStoredWebAuthnCredential } from '@/lib/webauthn';
+import {
+  closeSessionAndMarkAbsent,
+  isSessionExpiredByAge,
+} from '@/lib/session-lifecycle';
 
 const TOKEN_SUBMIT_GRACE_MS = 12_000;
 
@@ -35,6 +39,7 @@ export async function POST(request: Request) {
       .from('profiles')
       .select('role, webauthn_credential, webauthn_challenge')
       .eq('id', user.id)
+
       .single();
 
     if (!profile || profile.role !== 'student') {
@@ -64,6 +69,15 @@ export async function POST(request: Request) {
 
     if (!session) {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 404 });
+    }
+
+    if (isSessionExpiredByAge(session.created_at)) {
+      await closeSessionAndMarkAbsent(admin, {
+        sessionId: session.id,
+        classId: session.class_id,
+        teacherId: session.teacher_id,
+      });
+      return NextResponse.json({ error: 'Session has ended' }, { status: 410 });
     }
 
     // Idempotency: if already marked, treat as success.

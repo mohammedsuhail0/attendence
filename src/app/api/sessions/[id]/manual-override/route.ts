@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ManualOverrideAttendanceSchema } from '@/lib/schemas/attendance';
+import {
+  closeSessionAndMarkAbsent,
+  isSessionExpiredByAge,
+} from '@/lib/session-lifecycle';
 
 const PHOTO_BUCKET = 'student-photos';
 const PHOTO_PREFIX = 'it24';
@@ -24,7 +28,7 @@ async function getOwnedSession(sessionId: string, teacherId: string) {
   const admin = createAdminClient();
   const { data: session } = await admin
     .from('attendance_sessions')
-    .select('id, class_id, teacher_id, status')
+    .select('id, class_id, teacher_id, status, created_at')
     .eq('id', sessionId)
     .eq('teacher_id', teacherId)
     .single();
@@ -52,6 +56,16 @@ export async function GET(
     }
 
     const admin = createAdminClient();
+
+    // Auto-close session if open for >= 30 minutes
+    if (session.status === 'active' && isSessionExpiredByAge(session.created_at)) {
+      await closeSessionAndMarkAbsent(admin, {
+        sessionId: session.id,
+        classId: session.class_id,
+        teacherId: user.id,
+      });
+      session.status = 'closed';
+    }
     let photoColumnAvailable = true;
     const primaryEnrollmentQuery = await admin
       .from('enrollments')
@@ -189,6 +203,16 @@ export async function POST(
     const session = await getOwnedSession(id, user.id);
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+
+    if (session.status === 'active' && isSessionExpiredByAge(session.created_at)) {
+      const admin = createAdminClient();
+      await closeSessionAndMarkAbsent(admin, {
+        sessionId: session.id,
+        classId: session.class_id,
+        teacherId: user.id,
+      });
+      return NextResponse.json({ error: 'Session is already closed' }, { status: 400 });
     }
 
     if (session.status !== 'active') {
