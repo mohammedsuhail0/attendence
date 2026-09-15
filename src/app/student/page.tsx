@@ -915,7 +915,7 @@ export default function StudentDashboard() {
           onClick={() => setActiveTab('analytics')}
         >
           <span className="mobile-nav-icon">📊</span>
-          <span>Stats</span>
+          <span>Analytics</span>
         </button>
 
         <button
@@ -924,7 +924,7 @@ export default function StudentDashboard() {
           onClick={() => setActiveTab('leaderboard')}
         >
           <span className="mobile-nav-icon">🏆</span>
-          <span>Rank</span>
+          <span>Rankings</span>
         </button>
 
         <button
@@ -933,7 +933,7 @@ export default function StudentDashboard() {
           onClick={() => setActiveTab('profile')}
         >
           <span className="mobile-nav-icon">👤</span>
-          <span>Profile</span>
+          <span>Account</span>
         </button>
       </nav>
     </div>

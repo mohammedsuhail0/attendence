@@ -293,7 +293,8 @@ export default function TeacherDashboard() {
     }
   }
 
-  const [activeTab, setActiveTab] = useState<'broadcast' | 'roster' | 'history'>('broadcast');
+  const [activeTab, setActiveTab] = useState<'console' | 'rollcall' | 'logs'>('console');
+  const [rosterFilter, setRosterFilter] = useState<'all' | 'unmarked' | 'present'>('all');
 
   // Manual Override: 1-Tap mark present
   async function handleManualOverride(studentId: string) {
@@ -332,22 +333,27 @@ export default function TeacherDashboard() {
     router.refresh();
   }
 
-  const filteredRoster = roster.filter(
-    (s) =>
+  const filteredRoster = roster.filter((s) => {
+    const matchesSearch =
       s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.roll_number.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      s.roll_number.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (rosterFilter === 'present') return s.attendance_status === 'present';
+    if (rosterFilter === 'unmarked') return s.attendance_status !== 'present';
+    return true;
+  });
 
   const presentCount = roster.filter((s) => s.attendance_status === 'present').length;
   const totalCount = roster.length;
+  const unmarkedCount = Math.max(0, totalCount - presentCount);
 
   return (
     <div className="mobile-app-shell">
       {/* Top Mobile Header Bar */}
       <header className="mobile-app-header">
         <div className="brand-header-wrap">
-          <h1>Teacher Studio</h1>
-          <span className="user-info">{profile?.full_name || 'Faculty'}</span>
+          <h1>Faculty Console</h1>
+          <span className="user-info">{profile?.full_name || 'Teacher'}</span>
         </div>
         <button className="btn btn-outline btn-sm" onClick={handleLogout} type="button">
           Sign Out
@@ -355,16 +361,41 @@ export default function TeacherDashboard() {
       </header>
 
       {/* Main Tab Screen Content */}
-      <main className={`mobile-app-content ${activeTab === 'broadcast' ? 'fit-screen' : ''}`}>
+      <main className={`mobile-app-content ${activeTab === 'console' ? 'fit-screen' : ''}`}>
         {/* Banner Alerts */}
         {error && <div className="alert alert-error">⚠️ {error}</div>}
         {success && <div className="alert alert-success">✅ {success}</div>}
 
-        {/* TAB 1: BROADCAST HUD (FIT SCREEN, ZERO SCROLL) */}
-        {activeTab === 'broadcast' && (
+        {/* FLOATING LIVE CODE PILL (Disappears when timeLeft <= 0 or session closed) */}
+        {activeSession && timeLeft > 0 && (
+          <div className="live-code-pill">
+            <div className="pill-left">
+              <span className="pulse-dot"></span>
+              <span className="pill-tag">LIVE PIN</span>
+              <span className="pill-code">{token || '••••'}</span>
+            </div>
+            <div className="pill-right">
+              <span className="pill-timer">⏳ {timeLeft}s</span>
+              <button
+                type="button"
+                className="pill-btn"
+                onClick={() => {
+                  if (activeTab !== 'console') setActiveTab('console');
+                  setHudMode(hudMode === 'token' ? 'qr' : 'token');
+                }}
+                title="Toggle Mode"
+              >
+                {hudMode === 'token' ? '📱 QR' : '🔢 PIN'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 1: SESSION CONSOLE (FIT SCREEN, ZERO SCROLL) */}
+        {activeTab === 'console' && (
           activeSession ? (
             <div className="flex-col gap-1 justify-between" style={{ height: '100%' }}>
-              <div className="card" style={{ marginBottom: '0.5rem' }}>
+              <div className="card" style={{ marginBottom: '0.4rem' }}>
                 <div className="card-header">
                   <div className="flex items-center gap-1">
                     <span className="pulse-dot"></span>
@@ -398,7 +429,7 @@ export default function TeacherDashboard() {
                 {/* Main Broadcast Hero Display */}
                 {hudMode === 'token' ? (
                   <div className="token-display">
-                    <div className="text-sm text-dim">Share PIN with students</div>
+                    <div className="text-sm text-dim">Broadcast PIN to Class</div>
                     <div className="token-code">{token || '••••'}</div>
                     <div className={`token-timer ${timeLeft > 0 ? 'active' : 'expired'}`}>
                       {timeLeft > 0 ? `⏳ ${timeLeft}s remaining` : '⚠️ Token expired'}
@@ -435,7 +466,7 @@ export default function TeacherDashboard() {
                     onClick={refreshToken}
                     type="button"
                   >
-                    🔄 New Token
+                    🔄 Rotate Code
                   </button>
                   <button
                     className="btn btn-danger btn-block"
@@ -447,20 +478,29 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
-              {/* Quick Status Bar */}
-              <button
-                type="button"
-                className="btn btn-secondary btn-block flex-between"
-                onClick={() => setActiveTab('roster')}
+              {/* Physical Roll Call Shift Card */}
+              <div
+                className="roll-call-shift-card"
+                onClick={() => setActiveTab('rollcall')}
+                role="button"
+                tabIndex={0}
               >
-                <span>👥 Live Roster</span>
-                <span className="badge badge-present">{presentCount} / {totalCount} Present →</span>
-              </button>
+                <div className="flex items-center gap-1" style={{ minWidth: 0 }}>
+                  <div className="shift-icon">📋</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="shift-title">Physical Roll Call & Override</div>
+                    <div className="shift-subtitle">Shift to mark physical attendance</div>
+                  </div>
+                </div>
+                <div className="shift-badge">
+                  {presentCount}/{totalCount} Marked →
+                </div>
+              </div>
             </div>
           ) : (
             <div className="card">
               <div className="card-header">
-                <h2>Start Attendance</h2>
+                <h2>Launch Attendance</h2>
                 <span className="badge badge-active">{today}</span>
               </div>
 
@@ -522,33 +562,69 @@ export default function TeacherDashboard() {
                   className="btn btn-primary btn-block mt-2"
                   disabled={loading || !selectedSubject}
                 >
-                  {loading ? 'Creating Broadcast...' : '⚡ Launch Attendance Session'}
+                  {loading ? 'Initiating Session...' : '⚡ Launch Attendance Session'}
                 </button>
               </form>
             </div>
           )
         )}
 
-        {/* TAB 2: ROSTER OVERRIDE */}
-        {activeTab === 'roster' && (
+        {/* TAB 2: ROLL CALL REGISTER & MANUAL OVERRIDE */}
+        {activeTab === 'rollcall' && (
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div className="card-header">
               <div>
-                <h2>Live Roster</h2>
+                <h2>Roll Call Register</h2>
                 <p className="card-meta">
                   {presentCount} / {totalCount} Students Present
                 </p>
               </div>
+              <div className="flex items-center gap-1">
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => activeSession && fetchRoster(activeSession.id)}
+                  disabled={!activeSession}
+                  type="button"
+                  title="Refresh Roster"
+                >
+                  🔄
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setActiveTab('console')}
+                  type="button"
+                >
+                  ⚡ Console
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="roster-filter-bar">
               <button
-                className="btn btn-outline btn-sm"
-                onClick={() => activeSession && fetchRoster(activeSession.id)}
-                disabled={!activeSession}
                 type="button"
+                className={`roster-filter-btn ${rosterFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setRosterFilter('all')}
               >
-                🔄
+                All ({totalCount})
+              </button>
+              <button
+                type="button"
+                className={`roster-filter-btn ${rosterFilter === 'unmarked' ? 'active' : ''}`}
+                onClick={() => setRosterFilter('unmarked')}
+              >
+                Unmarked ({unmarkedCount})
+              </button>
+              <button
+                type="button"
+                className={`roster-filter-btn ${rosterFilter === 'present' ? 'active' : ''}`}
+                onClick={() => setRosterFilter('present')}
+              >
+                Present ({presentCount})
               </button>
             </div>
 
+            {/* Search Box */}
             <div className="roster-search-box">
               <input
                 type="text"
@@ -559,7 +635,8 @@ export default function TeacherDashboard() {
               />
             </div>
 
-            <div className="roster-list" style={{ flex: 1, maxHeight: 'none' }}>
+            {/* Scrollable Student Register List */}
+            <div className="roster-list" style={{ flex: 1, maxHeight: 'none', overflowY: 'auto' }}>
               {filteredRoster.map((s) => {
                 const isPresent = s.attendance_status === 'present';
                 return (
@@ -605,22 +682,22 @@ export default function TeacherDashboard() {
 
               {filteredRoster.length === 0 && (
                 <p className="text-dim text-sm text-center py-6">
-                  {activeSession ? 'No matching students' : 'No active session. Launch session to view roster.'}
+                  {activeSession ? 'No matching students found.' : 'No active session. Launch session to start roll call.'}
                 </p>
               )}
             </div>
           </div>
         )}
 
-        {/* TAB 3: PAST SESSIONS */}
-        {activeTab === 'history' && (
+        {/* TAB 3: SESSION LOGS */}
+        {activeTab === 'logs' && (
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div className="card-header">
-              <h2>Past Sessions</h2>
+              <h2>Session Logs</h2>
               <span className="badge badge-closed">{sessions.length} Recorded</span>
             </div>
 
-            <div className="table-wrapper" style={{ flex: 1 }}>
+            <div className="table-wrapper" style={{ flex: 1, overflowY: 'auto' }}>
               <table>
                 <thead>
                   <tr>
@@ -644,7 +721,7 @@ export default function TeacherDashboard() {
                   {sessions.length === 0 && (
                     <tr>
                       <td colSpan={3} className="text-center text-dim">
-                        No sessions recorded yet
+                        No session logs recorded yet
                       </td>
                     </tr>
                   )}
@@ -659,31 +736,32 @@ export default function TeacherDashboard() {
       <nav className="mobile-bottom-nav">
         <button
           type="button"
-          className={`mobile-nav-item ${activeTab === 'broadcast' ? 'active' : ''}`}
-          onClick={() => setActiveTab('broadcast')}
+          className={`mobile-nav-item ${activeTab === 'console' ? 'active' : ''}`}
+          onClick={() => setActiveTab('console')}
         >
-          <span className="mobile-nav-icon">📡</span>
-          <span>Broadcast</span>
+          <span className="mobile-nav-icon">⚡</span>
+          <span>Console</span>
         </button>
 
         <button
           type="button"
-          className={`mobile-nav-item ${activeTab === 'roster' ? 'active' : ''}`}
-          onClick={() => setActiveTab('roster')}
+          className={`mobile-nav-item ${activeTab === 'rollcall' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rollcall')}
         >
           <span className="mobile-nav-icon">📋</span>
-          <span>Roster</span>
+          <span>Roll Call</span>
         </button>
 
         <button
           type="button"
-          className={`mobile-nav-item ${activeTab === 'history' ? 'active' : ''}`}
-          onClick={() => setActiveTab('history')}
+          className={`mobile-nav-item ${activeTab === 'logs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('logs')}
         >
           <span className="mobile-nav-icon">🕒</span>
-          <span>History</span>
+          <span>Logs</span>
         </button>
       </nav>
     </div>
   );
 }
+

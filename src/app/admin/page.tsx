@@ -426,7 +426,7 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab('roster')}
         >
           <span className="mobile-nav-icon">👥</span>
-          <span>Roster</span>
+          <span>Directory</span>
         </button>
 
         <button
@@ -435,7 +435,7 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab('enroll')}
         >
           <span className="mobile-nav-icon">➕</span>
-          <span>Enroll</span>
+          <span>Enrollment</span>
         </button>
       </nav>
     </div>

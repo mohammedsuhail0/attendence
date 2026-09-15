@@ -1038,3 +1038,175 @@ tr:last-child td {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ========== FLOATING LIVE CODE PILL ========== */
+.live-code-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(15, 106, 75, 0.98), rgba(8, 56, 40, 0.99));
+  color: #ffffff;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-full);
+  margin-bottom: 0.75rem;
+  box-shadow: 0 6px 18px rgba(15, 106, 75, 0.35);
+  border: 1px solid rgba(196, 154, 70, 0.45);
+  animation: pillSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.pill-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pill-tag {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #f7d58b;
+  text-transform: uppercase;
+}
+
+.pill-code {
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pill-right {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.pill-timer {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: var(--mono);
+}
+
+.pill-btn {
+  padding: 0.22rem 0.55rem;
+  font-size: 0.675rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pill-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes pillSlideDown {
+  from { opacity: 0; transform: translateY(-10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ========== ROLL CALL QUICK-SHIFT CARD ========== */
+.roll-call-shift-card {
+  background: var(--surface);
+  border: 1.5px dashed var(--primary-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.95rem;
+  margin-top: 0.5rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.roll-call-shift-card:hover {
+  border-color: var(--primary);
+  border-style: solid;
+  background: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.shift-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.shift-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.shift-subtitle {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.shift-badge {
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--primary-border);
+  white-space: nowrap;
+}
+
+/* ========== ROSTER FILTER PILLS ========== */
+.roster-filter-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+}
+
+.roster-filter-btn {
+  flex: 1;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.roster-filter-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 2px 6px rgba(15, 106, 75, 0.25);
+}
+
