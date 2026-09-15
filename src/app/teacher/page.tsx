@@ -742,7 +742,7 @@ export default function TeacherDashboard() {
 
         {/* TAB 3: DATE-GROUPED SESSION HISTORY */}
         {activeTab === 'history' && (
-          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: '1rem' }}>
             <div className="card-header">
               <div>
                 <h2>Session History</h2>
@@ -751,7 +751,7 @@ export default function TeacherDashboard() {
               <span className="badge badge-closed">{sessionsByDate.length} Days</span>
             </div>
 
-            <div className="date-group-list" style={{ flex: 1, overflowY: 'auto', paddingRight: '2px' }}>
+            <div className="date-group-list" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               {sessionsByDate.map(([dateKey, daySessions]) => {
                 const isExpanded = !!expandedDates[dateKey]; // collapsed by default
                 return (

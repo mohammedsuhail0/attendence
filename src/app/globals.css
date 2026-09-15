@@ -1204,18 +1204,27 @@ tr:last-child td {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding-bottom: 0.5rem;
 }
 
 .date-group-card {
+  flex-shrink: 0 !important;
+  width: 100%;
+  min-height: 60px;
   background: #ffffff;
-  border: 1px solid rgba(17, 71, 52, 0.12);
+  border: 1px solid rgba(17, 71, 52, 0.14);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(17, 71, 52, 0.04);
+  box-shadow: 0 2px 8px rgba(17, 71, 52, 0.05);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .date-group-header {
+  flex-shrink: 0 !important;
+  min-height: 60px;
   padding: 0.85rem 1rem;
   background: #ffffff;
   display: flex;
@@ -1304,6 +1313,8 @@ tr:last-child td {
 }
 
 .date-session-item {
+  flex-shrink: 0 !important;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
