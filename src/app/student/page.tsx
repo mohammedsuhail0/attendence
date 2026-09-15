@@ -870,7 +870,7 @@ export default function StudentDashboard() {
                                     {r.attendance_sessions?.classes?.subject || 'Class'} • Period {r.attendance_sessions?.period}
                                   </div>
                                   <div className="date-session-sub">
-                                    {r.verified_at ? new Date(r.verified_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Attendance Logged'}
+                                    {r.marked_at ? new Date(r.marked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Attendance Logged'}
                                   </div>
                                 </div>
                                 <span className={`badge ${isPresent ? 'badge-present' : 'badge-absent'}`}>
