@@ -305,6 +305,29 @@ export default function TeacherDashboard() {
     }));
   }
 
+  function formatDateTitle(dateStr: string) {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          });
+        }
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  }
+
   // Group sessions by date
   const sessionsByDate = useMemo(() => {
     const map = new Map<string, AttendanceSession[]>();
@@ -730,41 +753,61 @@ export default function TeacherDashboard() {
 
             <div className="date-group-list" style={{ flex: 1, overflowY: 'auto', paddingRight: '2px' }}>
               {sessionsByDate.map(([dateKey, daySessions]) => {
-                const isExpanded = expandedDates[dateKey] ?? true; // expanded by default
+                const isExpanded = !!expandedDates[dateKey]; // collapsed by default
                 return (
                   <div key={dateKey} className="date-group-card">
                     <div
-                      className="date-group-header"
+                      className={`date-group-header ${isExpanded ? 'is-expanded' : ''}`}
                       onClick={() => toggleDate(dateKey)}
                       role="button"
                       tabIndex={0}
                     >
                       <div className="date-group-title">
-                        <span>{dateKey}</span>
-                        <span className="text-dim text-xs">({daySessions.length} {daySessions.length === 1 ? 'class' : 'classes'})</span>
+                        <div className="date-calendar-icon">📅</div>
+                        <div>
+                          <div className="date-title-text">{formatDateTitle(dateKey)}</div>
+                          <div className="date-subtitle-text">
+                            {daySessions.length} {daySessions.length === 1 ? 'class conducted' : 'classes conducted'}
+                          </div>
+                        </div>
                       </div>
-                      <span className="date-group-badge">
-                        {isExpanded ? 'Hide ▲' : 'Show ▼'}
-                      </span>
+                      <div className="date-group-action">
+                        <span className="date-group-badge">
+                          {isExpanded ? 'Hide ▲' : 'View Classes ▼'}
+                        </span>
+                      </div>
                     </div>
 
                     {isExpanded && (
                       <div className="date-group-content">
-                        {daySessions.map((s) => (
-                          <div key={s.id} className="date-session-item">
-                            <div className="date-session-meta">
-                              <div className="date-session-title">
-                                Period {s.period}
+                        {daySessions.map((s) => {
+                          const summary = s.attendance_summary;
+                          const presentCount = summary?.present ?? 0;
+                          const totalCount = summary?.total ?? 0;
+                          const pct = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+                          const isLive = s.status === 'active';
+
+                          return (
+                            <div key={s.id} className="date-session-item">
+                              <div className="date-session-meta">
+                                <div className="date-session-title">
+                                  {s.classes?.subject || 'Class Session'}
+                                </div>
+                                <div className="date-session-sub">
+                                  Period {s.period} {s.classes?.department ? `• ${s.classes.department}` : ''} {s.classes ? `(Yr ${getClassYear(s.classes)})` : ''}
+                                </div>
+                                {totalCount > 0 && (
+                                  <div className="date-session-stats">
+                                    👥 {presentCount} / {totalCount} Students Present ({pct}%)
+                                  </div>
+                                )}
                               </div>
-                              <div className="date-session-sub">
-                                Session ID: {s.id.slice(0, 8)}...
-                              </div>
+                              <span className={`badge ${isLive ? 'badge-present' : 'badge-closed'}`}>
+                                {isLive ? 'LIVE' : 'COMPLETED'}
+                              </span>
                             </div>
-                            <span className={`badge ${s.status === 'active' ? 'badge-present' : 'badge-closed'}`}>
-                              {s.status === 'active' ? 'LIVE' : 'COMPLETED'}
-                            </span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

@@ -547,6 +547,29 @@ export default function StudentDashboard() {
     }));
   }
 
+  function formatDateTitle(dateStr: string) {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          });
+        }
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  }
+
   // Group attendance records by date
   const recordsByDate = useMemo(() => {
     const map = new Map<string, typeof records>();
@@ -838,25 +861,33 @@ export default function StudentDashboard() {
 
               <div className="date-group-list" style={{ marginTop: '0.5rem' }}>
                 {recordsByDate.map(([dateKey, dayRecords]) => {
-                  const isExpanded = expandedStudentDates[dateKey] ?? true;
+                  const isExpanded = !!expandedStudentDates[dateKey]; // collapsed by default
                   const presentDayCount = dayRecords.filter((r) => r.status === 'present').length;
                   return (
                     <div key={dateKey} className="date-group-card">
                       <div
-                        className="date-group-header"
+                        className={`date-group-header ${isExpanded ? 'is-expanded' : ''}`}
                         onClick={() => toggleStudentDate(dateKey)}
                         role="button"
                         tabIndex={0}
                       >
                         <div className="date-group-title">
-                          <span>{dateKey}</span>
-                          <span className="text-dim text-xs">
-                            ({presentDayCount}/{dayRecords.length} present)
+                          <div className="date-calendar-icon">📅</div>
+                          <div>
+                            <div className="date-title-text">{formatDateTitle(dateKey)}</div>
+                            <div className="date-subtitle-text">
+                              {presentDayCount} of {dayRecords.length} attended ({Math.round((presentDayCount / (dayRecords.length || 1)) * 100)}%)
+                            </div>
+                          </div>
+                        </div>
+                        <div className="date-group-action">
+                          <span className={`badge ${presentDayCount === dayRecords.length ? 'badge-present' : presentDayCount > 0 ? 'badge-active' : 'badge-absent'}`} style={{ marginRight: '4px' }}>
+                            {presentDayCount}/{dayRecords.length}
+                          </span>
+                          <span className="date-group-badge">
+                            {isExpanded ? 'Hide ▲' : 'View Classes ▼'}
                           </span>
                         </div>
-                        <span className="date-group-badge">
-                          {isExpanded ? 'Hide ▲' : 'Show ▼'}
-                        </span>
                       </div>
 
                       {isExpanded && (
@@ -867,14 +898,17 @@ export default function StudentDashboard() {
                               <div key={r.id} className="date-session-item">
                                 <div className="date-session-meta">
                                   <div className="date-session-title">
-                                    {r.attendance_sessions?.classes?.subject || 'Class'} • Period {r.attendance_sessions?.period}
+                                    {r.attendance_sessions?.classes?.subject || 'Class Session'}
                                   </div>
                                   <div className="date-session-sub">
-                                    {r.marked_at ? new Date(r.marked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Attendance Logged'}
+                                    Period {r.attendance_sessions?.period || 1} {r.attendance_sessions?.classes?.department ? `• ${r.attendance_sessions.classes.department}` : ''}
+                                  </div>
+                                  <div className="date-session-stats">
+                                    🕒 {r.marked_at ? new Date(r.marked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Logged'} {r.mark_mode ? `• ${r.mark_mode === 'biometric' ? 'Biometric Passkey' : r.mark_mode === 'manual_override' ? 'Faculty Manual' : 'Auto Marked'}` : ''}
                                   </div>
                                 </div>
                                 <span className={`badge ${isPresent ? 'badge-present' : 'badge-absent'}`}>
-                                  {isPresent ? '✓ Present' : 'Absent'}
+                                  {isPresent ? '✓ Present' : '✕ Absent'}
                                 </span>
                               </div>
                             );
