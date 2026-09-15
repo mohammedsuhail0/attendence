@@ -1,4 +1,4 @@
-export type UserRole = 'teacher' | 'student';
+export type UserRole = 'teacher' | 'student' | 'admin';
 export type SessionStatus = 'active' | 'closed';
 export type AttendanceStatus = 'present' | 'absent';
 export type AttendanceMarkMode =

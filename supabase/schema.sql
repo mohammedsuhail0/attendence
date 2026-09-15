@@ -10,7 +10,7 @@ CREATE TABLE profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   full_name TEXT NOT NULL DEFAULT '',
-  role TEXT NOT NULL CHECK (role IN ('teacher', 'student')),
+  role TEXT NOT NULL CHECK (role IN ('teacher', 'student', 'admin')),
   department TEXT,
   section TEXT,
   roll_number TEXT,

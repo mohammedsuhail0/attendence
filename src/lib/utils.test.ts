@@ -27,6 +27,12 @@ describe('utils', () => {
     expect(isTokenExpired(future)).toBe(false);
   });
 
+  it('respects grace window for near-expired tokens', () => {
+    const justExpired = new Date(Date.now() - 500).toISOString();
+    expect(isTokenExpired(justExpired, 1_000)).toBe(false);
+    expect(isTokenExpired(justExpired, 100)).toBe(true);
+  });
+
   it('uses a 25-second token validity window', () => {
     expect(TOKEN_VALIDITY_SECONDS).toBe(25);
   });

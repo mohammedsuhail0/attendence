@@ -28,6 +28,8 @@ export async function loginAction(formData: FormData) {
 
   if (profile?.role === 'teacher') {
     redirect('/teacher');
+  } else if (profile?.role === 'admin') {
+    redirect('/admin');
   } else {
     redirect('/student');
   }

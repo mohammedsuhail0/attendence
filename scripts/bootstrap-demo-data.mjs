@@ -123,6 +123,13 @@ async function main() {
     { email: "teacher1@demo.com", full_name: "Dr. Sharma" },
     { email: "teacher2@demo.com", full_name: "Prof. Kumar" },
   ];
+  const admins = [
+    { email: "hod-it@demo.com", full_name: "HOD IT", department: "IT" },
+    { email: "hod-cse@demo.com", full_name: "HOD CSE", department: "CSE" },
+    { email: "hod-civil@demo.com", full_name: "HOD Civil", department: "Civil" },
+    { email: "hod-mech@demo.com", full_name: "HOD Mech", department: "Mech" },
+    { email: "hod-aids@demo.com", full_name: "HOD AIDS", department: "AIDS" },
+  ];
 
   let createdStudents = 0;
   let existingStudents = 0;
@@ -146,11 +153,20 @@ async function main() {
       full_name: t.full_name,
     });
   }
+  for (const adminUser of admins) {
+    await createAuthUser(supabase, {
+      email: adminUser.email,
+      password: "demo123456",
+      role: "admin",
+      full_name: adminUser.full_name,
+    });
+  }
 
   // Backfill missing profile rows in case trigger failed earlier
   const authEmails = [
     ...students.map((s) => s.email),
     ...teachers.map((t) => t.email),
+    ...admins.map((a) => a.email),
   ];
   const { data: authUsersPage, error: authListErr } = await supabase.auth.admin.listUsers({
     page: 1,
@@ -172,10 +188,9 @@ async function main() {
       id: u.id,
       email: u.email || "",
       full_name: (u.user_metadata?.full_name || "").toString(),
-      role:
-        (u.user_metadata?.role || "student") === "teacher"
-          ? "teacher"
-          : "student",
+      role: ["teacher", "admin"].includes(u.user_metadata?.role || "")
+        ? u.user_metadata.role
+        : "student",
     }));
 
   if (profilesToInsert.length) {
@@ -191,6 +206,7 @@ async function main() {
     .in("email", [
       ...students.map((s) => s.email),
       ...teachers.map((t) => t.email),
+      ...admins.map((a) => a.email),
     ]);
   if (profilesErr) throw new Error(`profiles fetch failed: ${profilesErr.message}`);
 
@@ -223,6 +239,20 @@ async function main() {
       })
       .eq("id", p.id);
     if (error) throw new Error(`teacher update failed for ${t.email}: ${error.message}`);
+  }
+
+  for (const adminUser of admins) {
+    const p = profileByEmail.get(adminUser.email);
+    if (!p) continue;
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        full_name: adminUser.full_name,
+        role: "admin",
+        department: adminUser.department,
+      })
+      .eq("id", p.id);
+    if (error) throw new Error(`admin update failed for ${adminUser.email}: ${error.message}`);
   }
 
   const teacher1 = profileByEmail.get("teacher1@demo.com");
@@ -276,6 +306,12 @@ async function main() {
         totalStudents: students.length,
         classes: classesToUpsert.length,
         enrollments: enrollRows.length,
+        admins: admins.length,
+        adminCredentials: admins.map((adminUser) => ({
+          email: adminUser.email,
+          password: "demo123456",
+          department: adminUser.department,
+        })),
       },
       null,
       2

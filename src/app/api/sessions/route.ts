@@ -198,12 +198,16 @@ export async function GET() {
       return NextResponse.json({ sessions: [] });
     }
 
-    const nowIso = new Date().toISOString();
+    const today = getDateStringInTimeZone();
+    const fourHoursAgoMs = Date.now() - 4 * 60 * 60 * 1000;
     const staleActiveSessions = sessions.filter(
-      (session) => session.status === 'active' && session.token_expires_at < nowIso
+      (session) =>
+        session.status === 'active' &&
+        (session.session_date < today ||
+          new Date(session.created_at).getTime() < fourHoursAgoMs)
     );
 
-    // Any active session with an expired token is stale; close it before returning history.
+    // Any active session left over from a previous day or abandoned for >4 hours is stale.
     if (staleActiveSessions.length > 0) {
       await Promise.all(
         staleActiveSessions.map((session) =>

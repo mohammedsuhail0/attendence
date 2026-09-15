@@ -1,6 +1,6 @@
-# ClassNova Web MVP
+# Nova Class Web MVP
 
-Token-based attendance system for college classes with teacher and student dashboards.
+Token-based attendance system for college classes with teacher, student, and department-admin dashboards.
 
 ## Tech Stack
 
@@ -12,6 +12,7 @@ Token-based attendance system for college classes with teacher and student dashb
 ## Features (MVP)
 
 - Teacher login and dashboard
+- Department HOD/Admin dashboard (year-wise student list, monthly attendance export, add student)
 - Create attendance session by `department + section + subject + period + date`
 - 30-second live token generation and refresh
 - Student token submit flow
@@ -28,7 +29,7 @@ Copy `.env.example` to `.env.local` and fill values:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-WEBAUTHN_RP_NAME=ClassNova
+WEBAUTHN_RP_NAME=Nova Class
 WEBAUTHN_RP_ID=localhost
 WEBAUTHN_ORIGIN=http://localhost:3000
 ```
@@ -57,7 +58,7 @@ Run `supabase/schema.sql`, then `supabase/seed.sql` in your Supabase SQL editor.
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://127.0.0.1:3001` (or your configured host/port).
 
 For Android and iPhone biometric testing, use Safari on iOS or Chrome on
 Android over HTTPS. A temporary tunnel can work for testing, but a stable public

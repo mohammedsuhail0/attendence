@@ -53,8 +53,8 @@ export function generateToken(): string {
   return token;
 }
 
-export function isTokenExpired(expiresAt: string): boolean {
-  return new Date(expiresAt).getTime() <= Date.now();
+export function isTokenExpired(expiresAt: string, graceMs: number = 0): boolean {
+  return new Date(expiresAt).getTime() + graceMs <= Date.now();
 }
 
 export function getDateStringInTimeZone(

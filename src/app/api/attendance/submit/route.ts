@@ -7,6 +7,8 @@ import { SubmitAttendanceSchema } from '@/lib/schemas/attendance';
 import { rateLimit, isTokenExpired } from '@/lib/utils';
 import { getWebAuthnConfig, parseStoredWebAuthnCredential } from '@/lib/webauthn';
 
+const TOKEN_SUBMIT_GRACE_MS = 12_000;
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -64,8 +66,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 404 });
     }
 
-    // Check token expiry
-    if (isTokenExpired(session.token_expires_at)) {
+    // Idempotency: if already marked, treat as success.
+    const { data: existing } = await admin
+      .from('attendance_records')
+      .select('id')
+      .eq('session_id', session.id)
+      .eq('student_id', user.id)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json({ message: 'Attendance already marked' }, { status: 200 });
+    }
+
+    // Check token expiry with a small grace window for in-flight mobile submissions.
+    if (isTokenExpired(session.token_expires_at, TOKEN_SUBMIT_GRACE_MS)) {
       return NextResponse.json({ error: 'Token has expired' }, { status: 410 });
     }
 
@@ -82,18 +96,6 @@ export async function POST(request: Request) {
         { error: 'You are not enrolled in this class' },
         { status: 403 }
       );
-    }
-
-    // Check for duplicate submission
-    const { data: existing } = await admin
-      .from('attendance_records')
-      .select('id')
-      .eq('session_id', session.id)
-      .eq('student_id', user.id)
-      .single();
-
-    if (existing) {
-      return NextResponse.json({ error: 'Attendance already marked' }, { status: 409 });
     }
 
     // Biometric verification is mandatory before attendance marking
@@ -138,24 +140,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const updatedCredential = {
-      ...storedCredential,
-      counter: biometricVerification.authenticationInfo.newCounter,
-    };
-
-    const { error: credentialUpdateError } = await admin
-      .from('profiles')
-      .update({
-        webauthn_credential: updatedCredential,
-        webauthn_challenge: null,
-      })
-      .eq('id', user.id);
-
-    if (credentialUpdateError) {
-      return NextResponse.json({ error: credentialUpdateError.message }, { status: 500 });
-    }
-
-    // Mark present
+    // Mark present first so attendance is never dropped due to profile update races/transient failures.
     const { error } = await admin
       .from('attendance_records')
       .insert({
@@ -166,6 +151,13 @@ export async function POST(request: Request) {
       });
 
     if (error) {
+      const isDuplicateAttendance =
+        error.code === '23505' ||
+        String(error.message).toLowerCase().includes('duplicate key value');
+      if (isDuplicateAttendance) {
+        return NextResponse.json({ message: 'Attendance already marked' }, { status: 200 });
+      }
+
       const isLegacySchema = String(error.message).includes('mark_mode');
       if (isLegacySchema) {
         const { error: fallbackError } = await admin
@@ -176,12 +168,32 @@ export async function POST(request: Request) {
             status: 'present',
           });
         if (fallbackError) {
+          const isFallbackDuplicate =
+            fallbackError.code === '23505' ||
+            String(fallbackError.message).toLowerCase().includes('duplicate key value');
+          if (isFallbackDuplicate) {
+            return NextResponse.json({ message: 'Attendance already marked' }, { status: 200 });
+          }
           return NextResponse.json({ error: fallbackError.message }, { status: 500 });
         }
       } else {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
     }
+
+    // Best-effort credential/challenge update after successful attendance write.
+    const updatedCredential = {
+      ...storedCredential,
+      counter: biometricVerification.authenticationInfo.newCounter,
+    };
+
+    await admin
+      .from('profiles')
+      .update({
+        webauthn_credential: updatedCredential,
+        webauthn_challenge: null,
+      })
+      .eq('id', user.id);
 
     return NextResponse.json({ message: 'Attendance marked successfully' }, { status: 201 });
   } catch {

@@ -15,8 +15,20 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const supabase = createClient();
     const rawIdentifier = identifier.trim();
+    if (!rawIdentifier) {
+      setError('Please enter your Email or Roll Number');
+      setLoading(false);
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter your password');
+      setLoading(false);
+      return;
+    }
+
+    const supabase = createClient();
     const normalizedIdentifier = rawIdentifier.includes('@')
       ? rawIdentifier.toLowerCase()
       : rawIdentifier.replace(/\s+/g, '');
@@ -30,8 +42,8 @@ export default function LoginPage() {
       });
 
       const resolveData = await resolveRes.json().catch(() => ({}));
-      if (!resolveRes.ok) {
-        setError(resolveData.error || 'Unable to process login request');
+      if (!resolveRes.ok || !resolveData.email) {
+        setError(resolveData.error || 'Unable to resolve roll number. Please check your roll number or use your email.');
         setLoading(false);
         return;
       }
@@ -45,7 +57,7 @@ export default function LoginPage() {
     });
 
     if (authError) {
-      setError('Invalid credentials');
+      setError('Invalid credentials. Please check your email/roll number and password.');
       setLoading(false);
       return;
     }

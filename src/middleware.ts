@@ -7,6 +7,12 @@ type CookieToSet = {
   options?: Record<string, unknown>;
 };
 
+function getDashboardByRole(role: string | undefined) {
+  if (role === 'teacher') return '/teacher';
+  if (role === 'admin') return '/admin';
+  return '/student';
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isApiPath = pathname.startsWith('/api');
@@ -66,12 +72,17 @@ export async function middleware(request: NextRequest) {
         .single();
 
       const url = request.nextUrl.clone();
-      url.pathname = profile?.role === 'teacher' ? '/teacher' : '/student';
+      url.pathname = getDashboardByRole(profile?.role);
       return NextResponse.redirect(url);
     }
 
     // Role-based route protection
-    if (user && (pathname.startsWith('/teacher') || pathname.startsWith('/student'))) {
+    if (
+      user &&
+      (pathname.startsWith('/teacher') ||
+        pathname.startsWith('/student') ||
+        pathname.startsWith('/admin'))
+    ) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
@@ -80,12 +91,17 @@ export async function middleware(request: NextRequest) {
 
       if (pathname.startsWith('/teacher') && profile?.role !== 'teacher') {
         const url = request.nextUrl.clone();
-        url.pathname = '/student';
+        url.pathname = getDashboardByRole(profile?.role);
         return NextResponse.redirect(url);
       }
       if (pathname.startsWith('/student') && profile?.role !== 'student') {
         const url = request.nextUrl.clone();
-        url.pathname = '/teacher';
+        url.pathname = getDashboardByRole(profile?.role);
+        return NextResponse.redirect(url);
+      }
+      if (pathname.startsWith('/admin') && profile?.role !== 'admin') {
+        const url = request.nextUrl.clone();
+        url.pathname = getDashboardByRole(profile?.role);
         return NextResponse.redirect(url);
       }
     }

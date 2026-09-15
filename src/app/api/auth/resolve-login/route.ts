@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const { data: profile, error } = await admin
       .from('profiles')
       .select('email')
-      .eq('roll_number', normalized)
+      .ilike('roll_number', normalized)
       .maybeSingle();
 
     // Return a stable shape and avoid exposing whether roll number exists.
