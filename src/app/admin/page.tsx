@@ -33,6 +33,7 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [defaulterOnly, setDefaulterOnly] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'roster' | 'enroll'>('overview');
 
   // New Student Form State
   const [newRollNumber, setNewRollNumber] = useState('');
@@ -117,208 +118,326 @@ export default function AdminDashboard() {
     router.refresh();
   }
 
-  function downloadCsv() {
-    window.location.href = `/api/admin/students/export?year=${selectedYear}&month=${selectedMonth}`;
-  }
+
 
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
       const matchesSearch =
         s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.roll_number.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchesSearch) return false;
-      if (defaulterOnly && s.attendance_percentage >= 75) return false;
-      return true;
+      const matchesDefaulter = !defaulterOnly || s.attendance_percentage < 75;
+      return matchesSearch && matchesDefaulter;
     });
   }, [students, searchQuery, defaulterOnly]);
 
-  const defaulterCount = students.filter((s) => s.attendance_percentage < 75).length;
-  const avgAttendance = students.length > 0
-    ? Math.round(students.reduce((acc, s) => acc + s.attendance_percentage, 0) / students.length)
-    : 0;
+  const defaulters = useMemo(() => {
+    return students.filter((s) => s.attendance_percentage < 75);
+  }, [students]);
+
+  const avgAttendance = useMemo(() => {
+    if (!students.length) return 0;
+    const total = students.reduce((acc, s) => acc + s.attendance_percentage, 0);
+    return Math.round(total / students.length);
+  }, [students]);
+
+  const defaulterCount = defaulters.length;
+
+  function downloadCsv() {
+    const headers = [
+      'Sl No',
+      'Roll Number',
+      'Full Name',
+      'Attended Classes',
+      'Total Classes',
+      'Attendance Percentage',
+      'Status',
+    ];
+    const rows = filteredStudents.map((s, index) => [
+      index + 1,
+      `"${s.roll_number}"`,
+      `"${s.full_name}"`,
+      s.total_attendance,
+      s.total_sessions,
+      `${s.attendance_percentage}%`,
+      s.attendance_percentage < 75 ? 'DEFAULTER' : 'REGULAR',
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Attendance_Report_Year${selectedYear}_${selectedMonth}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 
   return (
-    <div className="page">
-      {/* Top Mobile Header */}
-      <div className="page-header">
+    <div className="mobile-app-shell">
+      {/* Top Mobile Header Bar */}
+      <header className="mobile-app-header">
         <div className="brand-header-wrap">
           <h1>{title}</h1>
-          <span className="user-info">{adminName || 'Department Head'} • Year {selectedYear}</span>
+          <span className="user-info">{adminName || 'Dean / HOD'} • Year {selectedYear}</span>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={handleLogout}>
+        <button className="btn btn-outline btn-sm" onClick={handleLogout} type="button">
           Sign Out
         </button>
-      </div>
+      </header>
 
-      {/* Banner Alerts */}
-      {error && <div className="alert alert-error">⚠️ {error}</div>}
-      {success && <div className="alert alert-success">✅ {success}</div>}
+      {/* Main Tab Screen Content */}
+      <main className={`mobile-app-content ${activeTab === 'overview' ? 'fit-screen' : ''}`}>
+        {/* Banner Alerts */}
+        {error && <div className="alert alert-error">⚠️ {error}</div>}
+        {success && <div className="alert alert-success">✅ {success}</div>}
 
-      {/* COHORT YEAR FILTER PILLS */}
-      <div className="filter-pill-bar">
-        {YEAR_OPTIONS.map((yr) => (
-          <button
-            key={yr}
-            onClick={() => setSelectedYear(yr)}
-            className={`filter-pill-btn ${selectedYear === yr ? 'active' : ''}`}
-          >
-            Year {yr}
-          </button>
-        ))}
-      </div>
-
-      {/* KPI STATS CARD */}
-      <div className="student-kpi-grid">
-        <div className="student-kpi-card">
-          <strong>{avgAttendance}%</strong>
-          <p>Cohort Avg Attendance</p>
-        </div>
-        <div className="student-kpi-card">
-          <strong className={defaulterCount > 0 ? 'text-rose-700' : 'text-emerald-700'}>
-            {defaulterCount}
-          </strong>
-          <p>Defaulters (&lt;75% Attendance)</p>
-        </div>
-      </div>
-
-      {/* DEFAULTER QUICK FILTER TOGGLE */}
-      <button
-        onClick={() => setDefaulterOnly(!defaulterOnly)}
-        className={`defaulter-toggle-btn ${defaulterOnly ? 'active' : ''}`}
-        type="button"
-      >
-        <span>🚨 Defaulters Shortlist Filter</span>
-        <span className={`badge ${defaulterOnly ? 'badge-absent' : 'badge-closed'}`}>
-          {defaulterOnly ? 'FILTER ACTIVE' : `${defaulterCount} flagged`}
-        </span>
-      </button>
-
-      {/* ENROLL STUDENT ACCORDION */}
-      <div className="card">
-        <div className="card-header">
-          <h2>Enroll Student</h2>
-          <button
-            className="btn btn-outline btn-sm"
-            onClick={() => setShowAddForm(!showAddForm)}
-            type="button"
-          >
-            {showAddForm ? 'Cancel' : '+ New'}
-          </button>
-        </div>
-
-        {showAddForm && (
-          <form onSubmit={addStudent} className="mt-1">
-            <div className="form-group">
-              <label>Roll Number</label>
-              <input
-                type="text"
-                className="form-input font-mono"
-                placeholder="e.g. IT2401"
-                value={newRollNumber}
-                onChange={(e) => setNewRollNumber(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Full Name</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="e.g. Alex Johnson"
-                value={newFullName}
-                onChange={(e) => setNewFullName(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Academic Year</label>
-              <select
-                value={newYear}
-                onChange={(e) => setNewYear(e.target.value as (typeof YEAR_OPTIONS)[number])}
-                className="form-select"
-              >
+        {/* TAB 1: 📊 OVERVIEW (FIT SCREEN, ZERO SCROLL) */}
+        {activeTab === 'overview' && (
+          <div className="flex-col justify-between" style={{ height: '100%', gap: '0.65rem' }}>
+            <div className="flex-col gap-1">
+              {/* Cohort Year Filter Pills */}
+              <div className="filter-pill-bar" style={{ marginBottom: '0.25rem' }}>
                 {YEAR_OPTIONS.map((yr) => (
-                  <option key={yr} value={yr}>
+                  <button
+                    key={yr}
+                    onClick={() => setSelectedYear(yr)}
+                    className={`filter-pill-btn ${selectedYear === yr ? 'active' : ''}`}
+                    type="button"
+                  >
                     Year {yr}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
+
+              {/* KPI Stats Cards */}
+              <div className="student-kpi-grid" style={{ marginBottom: '0.25rem' }}>
+                <div className="student-kpi-card">
+                  <strong>{avgAttendance}%</strong>
+                  <p>Cohort Avg Attendance</p>
+                </div>
+                <div className="student-kpi-card">
+                  <strong className={defaulterCount > 0 ? 'text-rose-700' : 'text-emerald-700'}>
+                    {defaulterCount}
+                  </strong>
+                  <p>Defaulters (&lt;75%)</p>
+                </div>
+              </div>
+
+              {/* Defaulters Shortlist Toggle */}
+              <button
+                onClick={() => setDefaulterOnly(!defaulterOnly)}
+                className={`defaulter-toggle-btn ${defaulterOnly ? 'active' : ''}`}
+                type="button"
+                style={{ marginBottom: '0.25rem' }}
+              >
+                <span>🚨 Defaulters Shortlist</span>
+                <span className={`badge ${defaulterOnly ? 'badge-absent' : 'badge-closed'}`}>
+                  {defaulterOnly ? 'FILTER ACTIVE' : `${defaulterCount} flagged`}
+                </span>
+              </button>
+
+              {/* Quick Shortlist Preview Card */}
+              <div className="card" style={{ padding: '0.85rem', marginBottom: 0 }}>
+                <div className="card-header" style={{ marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '0.95rem' }}>High-Risk Shortlist (&lt;75%)</h3>
+                  <span className="badge badge-absent">{defaulters.length} flagged</span>
+                </div>
+                <div className="roster-list" style={{ maxHeight: '130px' }}>
+                  {defaulters.slice(0, 4).map((s) => (
+                    <div key={s.student_id} className="roster-row" style={{ padding: '0.45rem 0.65rem' }}>
+                      <div className="roster-name-col">
+                        <div className="roster-name-text">{s.full_name}</div>
+                        <div className="roster-roll-text">{s.roll_number}</div>
+                      </div>
+                      <span className="badge badge-absent">{s.attendance_percentage}%</span>
+                    </div>
+                  ))}
+                  {defaulters.length === 0 && (
+                    <p className="text-dim text-sm text-center py-2">No defaulters in this cohort! 🎉</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Full Roster Jump Button */}
+            <button
+              type="button"
+              className="btn btn-secondary btn-block flex-between"
+              onClick={() => setActiveTab('roster')}
+            >
+              <span>👥 View Full Cohort Roster</span>
+              <span className="badge badge-active">{students.length} Students →</span>
+            </button>
+          </div>
+        )}
+
+        {/* TAB 2: 👥 COHORT ROSTER */}
+        {activeTab === 'roster' && (
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {/* Cohort Year Filter Pills */}
+            <div className="filter-pill-bar" style={{ marginBottom: '0.5rem' }}>
+              {YEAR_OPTIONS.map((yr) => (
+                <button
+                  key={yr}
+                  onClick={() => setSelectedYear(yr)}
+                  className={`filter-pill-btn ${selectedYear === yr ? 'active' : ''}`}
+                  type="button"
+                >
+                  Year {yr}
+                </button>
+              ))}
+            </div>
+
+            <div className="card-header">
+              <div>
+                <h2>Cohort Roster</h2>
+                <p className="card-meta">
+                  {filteredStudents.length} of {students.length} students
+                </p>
+              </div>
+              <button className="btn btn-outline btn-sm" onClick={downloadCsv} type="button">
+                📥 Export CSV
+              </button>
             </div>
 
             <div className="form-group">
-              <label>Initial Password</label>
               <input
                 type="text"
-                className="form-input font-mono"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
+                placeholder="Search student or roll number..."
+                className="form-input"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || !newRollNumber || !newFullName}
-              className="btn btn-primary btn-block"
-            >
-              {loading ? 'Enrolling...' : 'Enroll Student'}
-            </button>
-          </form>
-        )}
-      </div>
+            <div className="roster-list" style={{ flex: 1, maxHeight: 'none' }}>
+              {filteredStudents.map((s) => {
+                const isDefaulter = s.attendance_percentage < 75;
+                return (
+                  <div
+                    key={s.student_id}
+                    className="roster-row"
+                    style={isDefaulter ? { borderLeft: '4px solid var(--danger)', background: 'var(--danger-light)' } : {}}
+                  >
+                    <div className="roster-name-col">
+                      <div className="roster-name-text font-bold">{s.full_name}</div>
+                      <div className="roster-roll-text">{s.roll_number} • {s.total_attendance}/{s.total_sessions} classes</div>
+                    </div>
 
-      {/* MASTER STUDENT ROSTER */}
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h2>Cohort Roster</h2>
-            <p className="card-meta">
-              Showing {filteredStudents.length} of {students.length} students
-            </p>
+                    <span className={`badge ${isDefaulter ? 'badge-absent' : 'badge-present'}`}>
+                      {s.attendance_percentage}%
+                    </span>
+                  </div>
+                );
+              })}
+
+              {filteredStudents.length === 0 && (
+                <p className="text-dim text-sm text-center py-6">No matching students found</p>
+              )}
+            </div>
           </div>
-          <button className="btn btn-outline btn-sm" onClick={downloadCsv} type="button">
-            📥 Export CSV
-          </button>
-        </div>
+        )}
 
-        <div className="form-group">
-          <input
-            type="text"
-            placeholder="Search student or roll number..."
-            className="form-input"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+        {/* TAB 3: ➕ ENROLL STUDENT */}
+        {activeTab === 'enroll' && (
+          <div className="card">
+            <div className="card-header">
+              <h2>Enroll Student</h2>
+              <span className="badge badge-active">Year {newYear}</span>
+            </div>
 
-        <div className="roster-list">
-          {filteredStudents.map((s) => {
-            const isDefaulter = s.attendance_percentage < 75;
-            return (
-              <div
-                key={s.student_id}
-                className="roster-row"
-                style={isDefaulter ? { borderLeft: '4px solid var(--danger)', background: 'var(--danger-light)' } : {}}
-              >
-                <div className="roster-name-col">
-                  <div className="roster-name-text font-bold">{s.full_name}</div>
-                  <div className="roster-roll-text">{s.roll_number} • {s.total_attendance}/{s.total_sessions} classes</div>
-                </div>
-
-                <span className={`badge ${isDefaulter ? 'badge-absent' : 'badge-present'}`}>
-                  {s.attendance_percentage}%
-                </span>
+            <form onSubmit={addStudent} className="mt-1">
+              <div className="form-group">
+                <label>Roll Number</label>
+                <input
+                  type="text"
+                  className="form-input font-mono"
+                  placeholder="e.g. IT2401"
+                  value={newRollNumber}
+                  onChange={(e) => setNewRollNumber(e.target.value)}
+                  required
+                />
               </div>
-            );
-          })}
 
-          {filteredStudents.length === 0 && (
-            <p className="text-dim text-sm text-center py-4">No matching students found</p>
-          )}
-        </div>
-      </div>
+              <div className="form-group">
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Alex Johnson"
+                  value={newFullName}
+                  onChange={(e) => setNewFullName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Academic Year</label>
+                <select
+                  value={newYear}
+                  onChange={(e) => setNewYear(e.target.value as (typeof YEAR_OPTIONS)[number])}
+                  className="form-select"
+                >
+                  {YEAR_OPTIONS.map((yr) => (
+                    <option key={yr} value={yr}>
+                      Year {yr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Initial Password</label>
+                <input
+                  type="text"
+                  className="form-input font-mono"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !newRollNumber || !newFullName}
+                className="btn btn-primary btn-block"
+              >
+                {loading ? 'Enrolling...' : '⚡ Enroll Student'}
+              </button>
+            </form>
+          </div>
+        )}
+      </main>
+
+      {/* Bottom Mobile Tab Bar */}
+      <nav className="mobile-bottom-nav">
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'overview' ? 'active' : ''}`}
+          onClick={() => setActiveTab('overview')}
+        >
+          <span className="mobile-nav-icon">📊</span>
+          <span>Overview</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'roster' ? 'active' : ''}`}
+          onClick={() => setActiveTab('roster')}
+        >
+          <span className="mobile-nav-icon">👥</span>
+          <span>Roster</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'enroll' ? 'active' : ''}`}
+          onClick={() => setActiveTab('enroll')}
+        >
+          <span className="mobile-nav-icon">➕</span>
+          <span>Enroll</span>
+        </button>
+      </nav>
     </div>
   );
 }

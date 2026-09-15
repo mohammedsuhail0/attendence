@@ -77,24 +77,146 @@ h1, h2, h3, h4 {
 }
 h1 { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
 h2 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
-h3 { font-size: 1.15rem; font-weight: 600; }
+/* ========== DEDICATED ZERO-SCROLL MOBILE APP SHELL ========== */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
 
-/* ========== MOBILE APP SHELL ========== */
+#app-root {
+  height: 100dvh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.mobile-app-shell {
+  width: 100%;
+  max-width: 440px;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background:
+    radial-gradient(circle at top left, rgba(196, 154, 70, 0.16), transparent 30%),
+    radial-gradient(circle at top right, rgba(15, 106, 75, 0.12), transparent 28%),
+    linear-gradient(180deg, #faf6ee 0%, #f4eddd 100%);
+  overflow: hidden;
+}
+
+@media (min-width: 481px) {
+  .mobile-app-shell {
+    height: 94dvh;
+    max-height: 860px;
+    border: 1px solid var(--border);
+    border-radius: 36px;
+    box-shadow: 0 25px 60px rgba(24, 55, 43, 0.15), 0 0 0 1px rgba(17, 71, 52, 0.08);
+  }
+}
+
+.mobile-app-header {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem 0.65rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 251, 244, 0.85);
+  backdrop-filter: blur(14px);
+  z-index: 20;
+}
+
+.mobile-app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mobile-app-content.fit-screen {
+  overflow: hidden;
+  justify-content: space-between;
+}
+
+/* Bottom Tab Navigation Bar */
+.mobile-bottom-nav {
+  flex-shrink: 0;
+  height: 60px;
+  background: rgba(255, 251, 244, 0.95);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 30;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 2px);
+}
+
+.mobile-nav-item {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 0.675rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  font-family: var(--font);
+}
+
+.mobile-nav-item:active {
+  transform: scale(0.92);
+}
+
+.mobile-nav-item.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.mobile-nav-item.active::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  width: 18px;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.mobile-nav-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* Legacy .page fallback */
 .page {
   width: 100%;
-  max-width: 480px;
+  max-width: 440px;
   margin: 0 auto;
-  padding: 1.25rem 1rem 3rem;
+  padding: 1rem 1rem 2.5rem;
   min-height: 100vh;
 }
 
-/* App Header Bar */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.85rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -105,10 +227,11 @@ h3 { font-size: 1.15rem; font-weight: 600; }
 
 .brand-header-wrap h1 {
   margin: 0;
+  font-size: 1.5rem;
 }
 
 .user-info {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-dim);
   font-weight: 500;
 }

@@ -113,7 +113,7 @@ export default function StudentDashboard() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'leaderboard' | 'history' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'checkin' | 'analytics' | 'leaderboard' | 'profile'>('checkin');
   const [profileImage, setProfileImage] = useState<string>(DEFAULT_AVATARS[0]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [qrTokenScanned, setQrTokenScanned] = useState(false);
@@ -568,15 +568,15 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="page">
+    <div className="mobile-app-shell">
       {/* Top Mobile Header */}
-      <div className="page-header">
+      <header className="mobile-app-header">
         <div className="flex items-center gap-1">
           <Image
             src={profileImage}
             alt="Profile Avatar"
-            width={38}
-            height={38}
+            width={36}
+            height={36}
             className="roster-avatar"
             unoptimized
           />
@@ -588,159 +588,181 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        <button
-          className="btn btn-outline btn-sm"
-          onClick={() => setActiveTab(activeTab === 'profile' ? 'dashboard' : 'profile')}
-        >
-          {activeTab === 'profile' ? 'Done' : '⚙️ Profile'}
-        </button>
-      </div>
+        <span className={`badge ${hasBiometric ? 'badge-present' : 'badge-absent'}`}>
+          {hasBiometric ? '🔐 PASSKEY' : '⚠️ NO PASSKEY'}
+        </span>
+      </header>
 
-      {/* Banner Alerts */}
-      {error && <div className="alert alert-error">⚠️ {error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
+      {/* Main Content Area */}
+      <main className={`mobile-app-content ${activeTab === 'checkin' ? 'fit-screen' : ''}`}>
+        {/* Banner Alerts */}
+        {error && <div className="alert alert-error">⚠️ {error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
 
-      {activeTab === 'dashboard' ? (
-        <>
-          {/* BIOMETRIC STATUS STRIP */}
-          <div className="card">
-            <div className="flex-between">
-              <div>
-                <h3>Biometric Passkey</h3>
-                <p className="card-meta">
-                  {hasBiometric ? '✓ Active & Verified on this device' : '⚠️ Setup required to mark attendance'}
-                </p>
-              </div>
-              <span className={`badge ${hasBiometric ? 'badge-present' : 'badge-absent'}`}>
-                {hasBiometric ? 'ACTIVE' : 'REQUIRED'}
-              </span>
-            </div>
-
-            {!hasBiometric && (
-              <button
-                type="button"
-                className="btn btn-primary btn-block mt-2"
-                onClick={registerBiometric}
-                disabled={biometricBusy || biometricReady !== true}
-              >
-                {biometricBusy ? 'Setting up Passkey...' : '🔐 Set Up Biometric Passkey'}
-              </button>
-            )}
-          </div>
-
-          {/* ATTENDANCE CHECK-IN CARD */}
-          <div className="card">
-            <div className="card-header">
-              <h2>Mark Attendance</h2>
-              {qrTokenScanned && <span className="badge badge-present">QR Scanned</span>}
-            </div>
-            <p className="text-dim text-sm">
-              {qrTokenScanned
-                ? 'PIN loaded from QR code. Tap verify to submit.'
-                : 'Enter the 4-digit PIN broadcasted by your professor.'}
-            </p>
-
-            <form onSubmit={submitAttendance}>
-              <label htmlFor="student-token-field" className="student-token-grid">
-                {[0, 1, 2, 3].map((index) => (
-                  <span
-                    key={index}
-                    className={`student-token-box ${token[index] ? 'active' : ''}`}
-                  >
-                    {token[index] || '•'}
-                  </span>
-                ))}
-                <input
-                  id="student-token-field"
-                  type="text"
-                  className="student-token-hidden-input"
-                  placeholder="A3F2"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))}
-                  maxLength={4}
-                  required
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="btn btn-primary btn-block"
-                disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
-              >
-                {loading ? '🔐 Authenticating...' : '⚡ Verify & Submit Biometrics'}
-              </button>
-            </form>
-          </div>
-
-          {/* MONTHLY KPI STANDING */}
-          <div className="student-kpi-grid">
-            <div className="student-kpi-card">
-              <strong>{monthlyPercentage}%</strong>
-              <p>This Month ({monthLabel(currentMonthKey)})</p>
-              <div className="progress-track">
-                <div
-                  className={`progress-bar-fill ${monthlyPercentage < 75 ? 'danger' : ''}`}
-                  style={{ width: `${monthlyPercentage}%` }}
-                ></div>
-              </div>
-            </div>
-
-            <div className="student-kpi-card">
-              <strong className={monthlyPercentage >= 75 ? 'text-emerald-700' : 'text-rose-700'}>
-                {monthlyPercentage >= 75 ? 'Good Standing' : 'Defaulter Risk'}
-              </strong>
-              <p>{monthlyPresent} of {monthlyTotal} classes attended</p>
-            </div>
-          </div>
-
-          {/* SUBJECT BREAKDOWN CARD */}
-          <div className="card">
-            <div className="card-header">
-              <h2>Subject Performance</h2>
-              <span className="badge badge-active">{subjectMap.size} Subjects</span>
-            </div>
-
-            <div className="flex-col">
-              {Array.from(subjectMap.entries()).map(([subject, stats]) => {
-                const pct = Math.round((stats.present / stats.total) * 100);
-                return (
-                  <div key={subject} className="student-performance-row">
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="roster-name-text">{subject}</div>
-                      <div className="text-dim text-sm">
-                        {stats.present} / {stats.total} Classes
-                      </div>
-                      <div className="progress-track">
-                        <div
-                          className={`progress-bar-fill ${pct < 75 ? 'warning' : ''}`}
-                          style={{ width: `${pct}%` }}
-                        ></div>
-                      </div>
+        {/* TAB 1: ⚡ CHECK-IN (FIT SCREEN, ZERO SCROLL) */}
+        {activeTab === 'checkin' && (
+          <div className="flex-col justify-between" style={{ height: '100%', gap: '0.65rem' }}>
+            <div className="flex-col gap-1">
+              {/* Biometric Status Notification */}
+              {!hasBiometric && (
+                <div className="card" style={{ marginBottom: '0.25rem', padding: '0.85rem' }}>
+                  <div className="flex-between">
+                    <div>
+                      <h3 style={{ fontSize: '0.95rem' }}>Biometric Passkey Required</h3>
+                      <p className="card-meta">Enable Face ID / Fingerprint to check in</p>
                     </div>
-                    <span className={`badge ${pct >= 75 ? 'badge-present' : 'badge-absent'}`}>
-                      {pct}%
-                    </span>
                   </div>
-                );
-              })}
-              {subjectMap.size === 0 && (
-                <p className="text-dim text-sm text-center py-3">No subjects recorded yet</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block mt-1"
+                    onClick={registerBiometric}
+                    disabled={biometricBusy || biometricReady !== true}
+                  >
+                    {biometricBusy ? 'Setting up Passkey...' : '🔐 Set Up Biometric Passkey'}
+                  </button>
+                </div>
               )}
+
+              {/* Attendance Check-in Card */}
+              <div className="card" style={{ marginBottom: '0.25rem' }}>
+                <div className="card-header">
+                  <h2>Mark Attendance</h2>
+                  {qrTokenScanned && <span className="badge badge-present">QR Auto-Loaded</span>}
+                </div>
+                <p className="text-dim text-sm text-center">
+                  {qrTokenScanned
+                    ? 'PIN loaded from QR code. Tap verify to submit.'
+                    : 'Enter the 4-digit PIN broadcasted by faculty.'}
+                </p>
+
+                <form onSubmit={submitAttendance}>
+                  <label htmlFor="student-token-field" className="student-token-grid" style={{ margin: '1rem 0' }}>
+                    {[0, 1, 2, 3].map((index) => (
+                      <span
+                        key={index}
+                        className={`student-token-box ${token[index] ? 'active' : ''}`}
+                      >
+                        {token[index] || '•'}
+                      </span>
+                    ))}
+                    <input
+                      id="student-token-field"
+                      type="text"
+                      className="student-token-hidden-input"
+                      placeholder="A3F2"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value.toUpperCase().slice(0, 4))}
+                      maxLength={4}
+                      required
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-block"
+                    disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
+                  >
+                    {loading ? '🔐 Authenticating...' : '⚡ Verify & Submit Biometrics'}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Monthly Attendance Quick Standing Card */}
+            <button
+              type="button"
+              className="card flex-between"
+              style={{ padding: '0.85rem 1rem', cursor: 'pointer', textAlign: 'left', background: 'var(--surface-2)' }}
+              onClick={() => setActiveTab('analytics')}
+            >
+              <div>
+                <div className="text-dim text-sm">Monthly Attendance Standing</div>
+                <div className="font-bold" style={{ color: 'var(--primary)', fontSize: '1.1rem' }}>
+                  {monthlyPercentage}% • {monthlyPresent} of {monthlyTotal} classes
+                </div>
+              </div>
+              <span className={`badge ${monthlyPercentage >= 75 ? 'badge-present' : 'badge-absent'}`}>
+                {monthlyPercentage >= 75 ? 'Good' : 'At Risk'} →
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* TAB 2: 📊 ANALYTICS & SUBJECTS */}
+        {activeTab === 'analytics' && (
+          <div className="flex-col gap-1">
+            {/* KPI Overview */}
+            <div className="student-kpi-grid">
+              <div className="student-kpi-card">
+                <strong>{monthlyPercentage}%</strong>
+                <p>This Month ({monthLabel(currentMonthKey)})</p>
+                <div className="progress-track">
+                  <div
+                    className={`progress-bar-fill ${monthlyPercentage < 75 ? 'danger' : ''}`}
+                    style={{ width: `${monthlyPercentage}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div className="student-kpi-card">
+                <strong className={monthlyPercentage >= 75 ? 'text-emerald-700' : 'text-rose-700'}>
+                  {monthlyPercentage >= 75 ? 'Good Standing' : 'Defaulter Risk'}
+                </strong>
+                <p>{monthlyPresent} of {monthlyTotal} classes attended</p>
+              </div>
+            </div>
+
+            {/* Subject Breakdown Card */}
+            <div className="card">
+              <div className="card-header">
+                <h2>Subject Performance</h2>
+                <span className="badge badge-active">{subjectMap.size} Subjects</span>
+              </div>
+
+              <div className="flex-col">
+                {Array.from(subjectMap.entries()).map(([subject, stats]) => {
+                  const pct = Math.round((stats.present / stats.total) * 100);
+                  return (
+                    <div key={subject} className="student-performance-row">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <div className="roster-name-text">{subject}</div>
+                        <div className="text-dim text-sm">
+                          {stats.present} / {stats.total} Classes
+                        </div>
+                        <div className="progress-track">
+                          <div
+                            className={`progress-bar-fill ${pct < 75 ? 'warning' : ''}`}
+                            style={{ width: `${pct}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <span className={`badge ${pct >= 75 ? 'badge-present' : 'badge-absent'}`}>
+                        {pct}%
+                      </span>
+                    </div>
+                  );
+                })}
+                {subjectMap.size === 0 && (
+                  <p className="text-dim text-sm text-center py-3">No subjects recorded yet</p>
+                )}
+              </div>
             </div>
           </div>
+        )}
 
-          {/* RACE TO #1 LEADERBOARD CARD */}
-          <div className="card">
+        {/* TAB 3: 🏆 LEADERBOARD */}
+        {activeTab === 'leaderboard' && (
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div className="card-header">
-              <h2>Race to #1 Leaderboard</h2>
-              <span className="badge badge-present">Rank #{userRankIndex || '-'}</span>
+              <h2>Leaderboard</h2>
+              <span className="badge badge-present">Your Rank #{userRankIndex || '-'}</span>
             </div>
 
-            <div className="roster-list">
+            <div className="roster-list" style={{ flex: 1, maxHeight: 'none' }}>
               {leaderboardLoading ? (
-                <p className="text-dim text-sm text-center py-3">Loading leaderboard...</p>
+                <p className="text-dim text-sm text-center py-6">Loading leaderboard...</p>
               ) : (
-                syncedLeaderboard.slice(0, 10).map((entry, idx) => {
+                syncedLeaderboard.slice(0, 15).map((entry, idx) => {
                   const isMe = entry.student_id === currentUserId;
                   const rankIcon = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
                   return (
@@ -750,7 +772,7 @@ export default function StudentDashboard() {
                       style={isMe ? { background: 'var(--surface-2)', borderColor: 'var(--primary)' } : {}}
                     >
                       <div className="flex items-center gap-1">
-                        <span className="font-bold text-sm">{rankIcon}</span>
+                        <span className="font-bold text-sm" style={{ width: 28 }}>{rankIcon}</span>
                         <div className="roster-name-col">
                           <div className="roster-name-text">
                             {entry.full_name} {isMe && '(You)'}
@@ -768,112 +790,152 @@ export default function StudentDashboard() {
               )}
             </div>
           </div>
+        )}
 
-          {/* RECENT ATTENDANCE LOG */}
-          <div className="card">
-            <div className="card-header">
-              <h2>Recent Attendance Log</h2>
-              <span className="badge badge-closed">{records.length} Total</span>
+        {/* TAB 4: 👤 PROFILE & LOGS */}
+        {activeTab === 'profile' && (
+          <div className="flex-col gap-1">
+            <div className="card">
+              <div className="card-header">
+                <h2>Profile Settings</h2>
+              </div>
+
+              <div className="flex items-center gap-2 mb-2 p-3 rounded-2xl bg-[#faf6ee] border border-stone-200">
+                <Image
+                  src={profileImage}
+                  alt="Avatar"
+                  width={52}
+                  height={52}
+                  className="rounded-full bg-white border border-stone-300"
+                  unoptimized
+                />
+                <div>
+                  <h3 className="text-base font-bold">{profile?.full_name || 'Student'}</h3>
+                  <p className="text-dim text-sm">Roll: {profile?.roll_number || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="mb-2">
+                <label className="font-bold text-sm text-dim block mb-1">Choose Avatar</label>
+                <div className="flex gap-1 flex-wrap">
+                  {DEFAULT_AVATARS.map((avatar, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => saveProfileImage(avatar)}
+                      type="button"
+                      className={`p-1 rounded-full border-2 transition-all ${profileImage === avatar ? 'border-emerald-700 scale-110' : 'border-transparent'}`}
+                    >
+                      <Image
+                        src={avatar}
+                        alt="Avatar"
+                        width={36}
+                        height={36}
+                        className="rounded-full"
+                        unoptimized
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={registerBiometric}
+                disabled={biometricBusy || biometricReady !== true}
+                type="button"
+                className="btn btn-secondary btn-block mb-1"
+              >
+                {biometricBusy ? 'Registering...' : '🔄 Re-register Biometric Passkey'}
+              </button>
+
+              <button onClick={handleLogout} type="button" className="btn btn-danger btn-block">
+                Sign Out
+              </button>
             </div>
 
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Period</th>
-                    <th>Subject</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.slice(0, 6).map((r) => {
-                    const isPresent = r.status === 'present';
-                    return (
-                      <tr key={r.id}>
-                        <td className="font-mono text-sm">{r.attendance_sessions?.session_date}</td>
-                        <td>P{r.attendance_sessions?.period}</td>
-                        <td className="font-bold">{r.attendance_sessions?.classes?.subject || 'Class'}</td>
-                        <td>
-                          <span className={`badge ${isPresent ? 'badge-present' : 'badge-absent'}`}>
-                            {isPresent ? 'Present' : 'Absent'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {records.length === 0 && (
+            {/* Attendance Log Table */}
+            <div className="card">
+              <div className="card-header">
+                <h2>Recent Attendance Log</h2>
+                <span className="badge badge-closed">{records.length} Total</span>
+              </div>
+
+              <div className="table-wrapper">
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={4} className="text-center text-dim">No records found</td>
+                      <th>Date</th>
+                      <th>Period</th>
+                      <th>Subject</th>
+                      <th>Status</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {records.slice(0, 8).map((r) => {
+                      const isPresent = r.status === 'present';
+                      return (
+                        <tr key={r.id}>
+                          <td className="font-mono text-sm">{r.attendance_sessions?.session_date}</td>
+                          <td>P{r.attendance_sessions?.period}</td>
+                          <td className="font-bold">{r.attendance_sessions?.classes?.subject || 'Class'}</td>
+                          <td>
+                            <span className={`badge ${isPresent ? 'badge-present' : 'badge-absent'}`}>
+                              {isPresent ? 'Present' : 'Absent'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {records.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="text-center text-dim">No records found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </>
-      ) : (
-        /* PROFILE CUSTOMIZATION VIEW */
-        <div className="card">
-          <div className="card-header">
-            <h2>Profile Settings</h2>
-            <button className="btn btn-outline btn-sm" onClick={() => setActiveTab('dashboard')}>
-              Back
-            </button>
-          </div>
+        )}
+      </main>
 
-          <div className="flex items-center gap-2 mb-2 p-3 rounded-2xl bg-[#faf6ee] border border-stone-200">
-            <Image
-              src={profileImage}
-              alt="Avatar"
-              width={56}
-              height={56}
-              className="rounded-full bg-white border border-stone-300"
-              unoptimized
-            />
-            <div>
-              <h3 className="text-base font-bold">{profile?.full_name || 'Student'}</h3>
-              <p className="text-dim text-sm">Roll: {profile?.roll_number || 'N/A'}</p>
-            </div>
-          </div>
+      {/* Bottom Mobile Tab Bar */}
+      <nav className="mobile-bottom-nav">
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'checkin' ? 'active' : ''}`}
+          onClick={() => setActiveTab('checkin')}
+        >
+          <span className="mobile-nav-icon">⚡</span>
+          <span>Check-In</span>
+        </button>
 
-          <div className="mb-2">
-            <label className="font-bold text-sm text-dim block mb-1">Select Avatar</label>
-            <div className="flex gap-1 flex-wrap">
-              {DEFAULT_AVATARS.map((avatar, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => saveProfileImage(avatar)}
-                  className={`p-1 rounded-full border-2 transition-all ${profileImage === avatar ? 'border-emerald-700 scale-110' : 'border-transparent'}`}
-                >
-                  <Image
-                    src={avatar}
-                    alt="Avatar"
-                    width={40}
-                    height={40}
-                    className="rounded-full"
-                    unoptimized
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
+          onClick={() => setActiveTab('analytics')}
+        >
+          <span className="mobile-nav-icon">📊</span>
+          <span>Stats</span>
+        </button>
 
-          <div className="mt-3">
-            <button
-              onClick={registerBiometric}
-              disabled={biometricBusy || biometricReady !== true}
-              className="btn btn-secondary btn-block mb-1"
-            >
-              {biometricBusy ? 'Registering...' : '🔄 Re-register Biometric Passkey'}
-            </button>
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'leaderboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('leaderboard')}
+        >
+          <span className="mobile-nav-icon">🏆</span>
+          <span>Rank</span>
+        </button>
 
-            <button onClick={handleLogout} className="btn btn-danger btn-block">
-              Sign Out
-            </button>
-          </div>
-        </div>
-      )}
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'profile' ? 'active' : ''}`}
+          onClick={() => setActiveTab('profile')}
+        >
+          <span className="mobile-nav-icon">👤</span>
+          <span>Profile</span>
+        </button>
+      </nav>
     </div>
   );
 }

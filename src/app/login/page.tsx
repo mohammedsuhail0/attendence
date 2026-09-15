@@ -106,8 +106,8 @@ export default function LoginPage() {
             src="/images/nova-class-logo.png"
             alt="Nova Class logo"
             className="signin-logo-image"
-            width={78}
-            height={78}
+            width={52}
+            height={52}
             priority
           />
           <h1>Nova Class</h1>
