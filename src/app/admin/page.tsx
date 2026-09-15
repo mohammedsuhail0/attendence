@@ -416,7 +416,6 @@ export default function AdminDashboard() {
           className={`mobile-nav-item ${activeTab === 'overview' ? 'active' : ''}`}
           onClick={() => setActiveTab('overview')}
         >
-          <span className="mobile-nav-icon">📊</span>
           <span>Overview</span>
         </button>
 
@@ -425,7 +424,6 @@ export default function AdminDashboard() {
           className={`mobile-nav-item ${activeTab === 'roster' ? 'active' : ''}`}
           onClick={() => setActiveTab('roster')}
         >
-          <span className="mobile-nav-icon">👥</span>
           <span>Directory</span>
         </button>
 
@@ -434,7 +432,6 @@ export default function AdminDashboard() {
           className={`mobile-nav-item ${activeTab === 'enroll' ? 'active' : ''}`}
           onClick={() => setActiveTab('enroll')}
         >
-          <span className="mobile-nav-icon">➕</span>
           <span>Enrollment</span>
         </button>
       </nav>

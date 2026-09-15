@@ -538,34 +538,28 @@ export default function StudentDashboard() {
     router.refresh();
   }
 
-  async function saveProfileImage(imageUrl: string) {
-    setProfileImage(imageUrl);
-    setProfile((prev) => (prev ? { ...prev, photo_path: imageUrl } : prev));
-    setLeaderboard((prev) =>
-      prev.map((entry) =>
-        entry.student_id === currentUserId
-          ? { ...entry, photo_path: imageUrl }
-          : entry
-      )
-    );
+  const [expandedStudentDates, setExpandedStudentDates] = useState<Record<string, boolean>>({});
 
-    if (currentUserId) {
-      window.localStorage.setItem(`student-avatar-${currentUserId}`, imageUrl);
-    }
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ photo_path: imageUrl })
-      .eq('id', currentUserId);
-
-    if (updateError) {
-      setError('Profile avatar update failed.');
-      return;
-    }
-
-    await loadLeaderboard();
-    setSuccess('Profile avatar updated.');
+  function toggleStudentDate(dateKey: string) {
+    setExpandedStudentDates((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
   }
+
+  // Group attendance records by date
+  const recordsByDate = useMemo(() => {
+    const map = new Map<string, typeof records>();
+    for (const r of records) {
+      const d = r.attendance_sessions?.session_date || 'Undated';
+      const list = map.get(d) || [];
+      list.push(r);
+      map.set(d, list);
+    }
+    return Array.from(map.entries()).sort(
+      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()
+    );
+  }, [records]);
 
   return (
     <div className="mobile-app-shell">
@@ -589,7 +583,7 @@ export default function StudentDashboard() {
         </div>
 
         <span className={`badge ${hasBiometric ? 'badge-present' : 'badge-absent'}`}>
-          {hasBiometric ? '🔐 PASSKEY' : '⚠️ NO PASSKEY'}
+          {hasBiometric ? 'PASSKEY' : 'NO PASSKEY'}
         </span>
       </header>
 
@@ -599,7 +593,7 @@ export default function StudentDashboard() {
         {error && <div className="alert alert-error">⚠️ {error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
 
-        {/* TAB 1: ⚡ CHECK-IN (FIT SCREEN, ZERO SCROLL) */}
+        {/* TAB 1: CHECK-IN (FIT SCREEN, ZERO SCROLL) */}
         {activeTab === 'checkin' && (
           <div className="flex-col justify-between" style={{ height: '100%', gap: '0.65rem' }}>
             <div className="flex-col gap-1">
@@ -618,7 +612,7 @@ export default function StudentDashboard() {
                     onClick={registerBiometric}
                     disabled={biometricBusy || biometricReady !== true}
                   >
-                    {biometricBusy ? 'Setting up Passkey...' : '🔐 Set Up Biometric Passkey'}
+                    {biometricBusy ? 'Setting up Passkey...' : 'Set Up Biometric Passkey'}
                   </button>
                 </div>
               )}
@@ -662,7 +656,7 @@ export default function StudentDashboard() {
                     className="btn btn-primary btn-block"
                     disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
                   >
-                    {loading ? '🔐 Authenticating...' : '⚡ Verify & Submit Biometrics'}
+                    {loading ? 'Authenticating...' : 'Verify & Submit Attendance'}
                   </button>
                 </form>
               </div>
@@ -688,7 +682,7 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* TAB 2: 📊 ANALYTICS & SUBJECTS */}
+        {/* TAB 2: ANALYTICS & SUBJECTS */}
         {activeTab === 'analytics' && (
           <div className="flex-col gap-1">
             {/* KPI Overview */}
@@ -750,7 +744,7 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* TAB 3: 🏆 LEADERBOARD */}
+        {/* TAB 3: LEADERBOARD */}
         {activeTab === 'leaderboard' && (
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div className="card-header">
@@ -764,7 +758,7 @@ export default function StudentDashboard() {
               ) : (
                 syncedLeaderboard.slice(0, 15).map((entry, idx) => {
                   const isMe = entry.student_id === currentUserId;
-                  const rankIcon = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                  const rankIcon = idx === 0 ? '1' : idx === 1 ? '2' : idx === 2 ? '3' : `${idx + 1}`;
                   return (
                     <div
                       key={entry.student_id}
@@ -772,7 +766,7 @@ export default function StudentDashboard() {
                       style={isMe ? { background: 'var(--surface-2)', borderColor: 'var(--primary)' } : {}}
                     >
                       <div className="flex items-center gap-1">
-                        <span className="font-bold text-sm" style={{ width: 28 }}>{rankIcon}</span>
+                        <span className="font-bold text-sm" style={{ width: 24 }}>#{rankIcon}</span>
                         <div className="roster-name-col">
                           <div className="roster-name-text">
                             {entry.full_name} {isMe && '(You)'}
@@ -792,49 +786,29 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* TAB 4: 👤 PROFILE & LOGS */}
+        {/* TAB 4: PROFILE & DATE-GROUPED LOGS */}
         {activeTab === 'profile' && (
           <div className="flex-col gap-1">
+            {/* Static Student Profile Card (No edit/change avatar) */}
             <div className="card">
               <div className="card-header">
-                <h2>Profile Settings</h2>
+                <h2>Student Profile</h2>
+                <span className="badge badge-active">{profile?.roll_number ? `Roll ${profile.roll_number}` : 'Enrolled'}</span>
               </div>
 
               <div className="flex items-center gap-2 mb-2 p-3 rounded-2xl bg-[#faf6ee] border border-stone-200">
                 <Image
                   src={profileImage}
-                  alt="Avatar"
-                  width={52}
-                  height={52}
-                  className="rounded-full bg-white border border-stone-300"
+                  alt="Student Avatar"
+                  width={56}
+                  height={56}
+                  className="rounded-full bg-white border border-stone-300 object-cover"
                   unoptimized
                 />
                 <div>
                   <h3 className="text-base font-bold">{profile?.full_name || 'Student'}</h3>
-                  <p className="text-dim text-sm">Roll: {profile?.roll_number || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="mb-2">
-                <label className="font-bold text-sm text-dim block mb-1">Choose Avatar</label>
-                <div className="flex gap-1 flex-wrap">
-                  {DEFAULT_AVATARS.map((avatar, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => saveProfileImage(avatar)}
-                      type="button"
-                      className={`p-1 rounded-full border-2 transition-all ${profileImage === avatar ? 'border-emerald-700 scale-110' : 'border-transparent'}`}
-                    >
-                      <Image
-                        src={avatar}
-                        alt="Avatar"
-                        width={36}
-                        height={36}
-                        className="rounded-full"
-                        unoptimized
-                      />
-                    </button>
-                  ))}
+                  <p className="text-dim text-sm">Roll No: {profile?.roll_number || 'N/A'}</p>
+                  <p className="text-dim text-xs">Biometrics: {hasBiometric ? 'Passkey Enrolled' : 'Not Enrolled'}</p>
                 </div>
               </div>
 
@@ -844,7 +818,7 @@ export default function StudentDashboard() {
                 type="button"
                 className="btn btn-secondary btn-block mb-1"
               >
-                {biometricBusy ? 'Registering...' : '🔄 Re-register Biometric Passkey'}
+                {biometricBusy ? 'Registering...' : 'Re-register Biometric Passkey'}
               </button>
 
               <button onClick={handleLogout} type="button" className="btn btn-danger btn-block">
@@ -852,60 +826,83 @@ export default function StudentDashboard() {
               </button>
             </div>
 
-            {/* Attendance Log Table */}
+            {/* Date-Grouped Attendance Logs */}
             <div className="card">
               <div className="card-header">
-                <h2>Recent Attendance Log</h2>
-                <span className="badge badge-closed">{records.length} Total</span>
+                <div>
+                  <h2>Attendance History</h2>
+                  <p className="card-meta">Grouped by Date • {records.length} classes recorded</p>
+                </div>
+                <span className="badge badge-closed">{recordsByDate.length} Days</span>
               </div>
 
-              <div className="table-wrapper">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Period</th>
-                      <th>Subject</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {records.slice(0, 8).map((r) => {
-                      const isPresent = r.status === 'present';
-                      return (
-                        <tr key={r.id}>
-                          <td className="font-mono text-sm">{r.attendance_sessions?.session_date}</td>
-                          <td>P{r.attendance_sessions?.period}</td>
-                          <td className="font-bold">{r.attendance_sessions?.classes?.subject || 'Class'}</td>
-                          <td>
-                            <span className={`badge ${isPresent ? 'badge-present' : 'badge-absent'}`}>
-                              {isPresent ? 'Present' : 'Absent'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {records.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="text-center text-dim">No records found</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="date-group-list" style={{ marginTop: '0.5rem' }}>
+                {recordsByDate.map(([dateKey, dayRecords]) => {
+                  const isExpanded = expandedStudentDates[dateKey] ?? true;
+                  const presentDayCount = dayRecords.filter((r) => r.status === 'present').length;
+                  return (
+                    <div key={dateKey} className="date-group-card">
+                      <div
+                        className="date-group-header"
+                        onClick={() => toggleStudentDate(dateKey)}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <div className="date-group-title">
+                          <span>{dateKey}</span>
+                          <span className="text-dim text-xs">
+                            ({presentDayCount}/{dayRecords.length} present)
+                          </span>
+                        </div>
+                        <span className="date-group-badge">
+                          {isExpanded ? 'Hide ▲' : 'Show ▼'}
+                        </span>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="date-group-content">
+                          {dayRecords.map((r) => {
+                            const isPresent = r.status === 'present';
+                            return (
+                              <div key={r.id} className="date-session-item">
+                                <div className="date-session-meta">
+                                  <div className="date-session-title">
+                                    {r.attendance_sessions?.classes?.subject || 'Class'} • Period {r.attendance_sessions?.period}
+                                  </div>
+                                  <div className="date-session-sub">
+                                    {r.verified_at ? new Date(r.verified_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Attendance Logged'}
+                                  </div>
+                                </div>
+                                <span className={`badge ${isPresent ? 'badge-present' : 'badge-absent'}`}>
+                                  {isPresent ? '✓ Present' : 'Absent'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {recordsByDate.length === 0 && (
+                  <p className="text-center text-dim py-6 text-sm">
+                    No attendance records found yet.
+                  </p>
+                )}
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* Bottom Mobile Tab Bar */}
+      {/* Bottom Mobile Tab Bar (Clean Text Navigation) */}
       <nav className="mobile-bottom-nav">
         <button
           type="button"
           className={`mobile-nav-item ${activeTab === 'checkin' ? 'active' : ''}`}
           onClick={() => setActiveTab('checkin')}
         >
-          <span className="mobile-nav-icon">⚡</span>
           <span>Check-In</span>
         </button>
 
@@ -914,7 +911,6 @@ export default function StudentDashboard() {
           className={`mobile-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
           onClick={() => setActiveTab('analytics')}
         >
-          <span className="mobile-nav-icon">📊</span>
           <span>Analytics</span>
         </button>
 
@@ -923,7 +919,6 @@ export default function StudentDashboard() {
           className={`mobile-nav-item ${activeTab === 'leaderboard' ? 'active' : ''}`}
           onClick={() => setActiveTab('leaderboard')}
         >
-          <span className="mobile-nav-icon">🏆</span>
           <span>Rankings</span>
         </button>
 
@@ -932,7 +927,6 @@ export default function StudentDashboard() {
           className={`mobile-nav-item ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => setActiveTab('profile')}
         >
-          <span className="mobile-nav-icon">👤</span>
           <span>Account</span>
         </button>
       </nav>

@@ -293,8 +293,31 @@ export default function TeacherDashboard() {
     }
   }
 
-  const [activeTab, setActiveTab] = useState<'console' | 'rollcall' | 'logs'>('console');
+  const [activeTab, setActiveTab] = useState<'console' | 'rollcall' | 'history'>('console');
   const [rosterFilter, setRosterFilter] = useState<'all' | 'unmarked' | 'present'>('all');
+  const [selectedStudentForModal, setSelectedStudentForModal] = useState<StudentRosterItem | null>(null);
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+
+  function toggleDate(dateKey: string) {
+    setExpandedDates((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  }
+
+  // Group sessions by date
+  const sessionsByDate = useMemo(() => {
+    const map = new Map<string, AttendanceSession[]>();
+    for (const s of sessions) {
+      const d = s.session_date || 'Undated';
+      const list = map.get(d) || [];
+      list.push(s);
+      map.set(d, list);
+    }
+    return Array.from(map.entries()).sort(
+      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()
+    );
+  }, [sessions]);
 
   // Manual Override: 1-Tap mark present
   async function handleManualOverride(studentId: string) {
@@ -385,7 +408,7 @@ export default function TeacherDashboard() {
                 }}
                 title="Toggle Mode"
               >
-                {hudMode === 'token' ? '📱 QR' : '🔢 PIN'}
+                {hudMode === 'token' ? 'QR Code' : 'PIN'}
               </button>
             </div>
           </div>
@@ -415,14 +438,14 @@ export default function TeacherDashboard() {
                     className={`hud-tab-btn ${hudMode === 'token' ? 'active' : ''}`}
                     type="button"
                   >
-                    🔢 4-Digit PIN
+                    4-Digit PIN
                   </button>
                   <button
                     onClick={() => setHudMode('qr')}
                     className={`hud-tab-btn ${hudMode === 'qr' ? 'active' : ''}`}
                     type="button"
                   >
-                    📱 Dynamic QR Code
+                    Dynamic QR Code
                   </button>
                 </div>
 
@@ -466,14 +489,14 @@ export default function TeacherDashboard() {
                     onClick={refreshToken}
                     type="button"
                   >
-                    🔄 Rotate Code
+                    Rotate Code
                   </button>
                   <button
                     className="btn btn-danger btn-block"
                     onClick={closeSession}
                     type="button"
                   >
-                    🛑 Close Session
+                    Close Session
                   </button>
                 </div>
               </div>
@@ -562,7 +585,7 @@ export default function TeacherDashboard() {
                   className="btn btn-primary btn-block mt-2"
                   disabled={loading || !selectedSubject}
                 >
-                  {loading ? 'Initiating Session...' : '⚡ Launch Attendance Session'}
+                  {loading ? 'Initiating Session...' : 'Launch Attendance Session'}
                 </button>
               </form>
             </div>
@@ -587,14 +610,14 @@ export default function TeacherDashboard() {
                   type="button"
                   title="Refresh Roster"
                 >
-                  🔄
+                  Refresh
                 </button>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => setActiveTab('console')}
                   type="button"
                 >
-                  ⚡ Console
+                  Console
                 </button>
               </div>
             </div>
@@ -641,13 +664,18 @@ export default function TeacherDashboard() {
                 const isPresent = s.attendance_status === 'present';
                 return (
                   <div key={s.student_id} className="roster-row">
-                    <div className="roster-student-meta">
+                    <div
+                      className="roster-student-meta"
+                      style={{ cursor: 'pointer', flex: 1 }}
+                      onClick={() => setSelectedStudentForModal(s)}
+                      title="Click to view student details"
+                    >
                       {s.photo_url ? (
                         <Image
                           src={s.photo_url}
                           alt={s.full_name}
-                          width={32}
-                          height={32}
+                          width={34}
+                          height={34}
                           className="roster-avatar"
                           unoptimized
                         />
@@ -658,7 +686,7 @@ export default function TeacherDashboard() {
                       )}
                       <div className="roster-name-col">
                         <div className="roster-name-text">{s.full_name}</div>
-                        <div className="roster-roll-text">{s.roll_number || 'Enrolled'}</div>
+                        <div className="roster-roll-text">{s.roll_number || 'Enrolled'} • View Info</div>
                       </div>
                     </div>
 
@@ -689,57 +717,158 @@ export default function TeacherDashboard() {
           </div>
         )}
 
-        {/* TAB 3: SESSION LOGS */}
-        {activeTab === 'logs' && (
+        {/* TAB 3: DATE-GROUPED SESSION HISTORY */}
+        {activeTab === 'history' && (
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div className="card-header">
-              <h2>Session Logs</h2>
-              <span className="badge badge-closed">{sessions.length} Recorded</span>
+              <div>
+                <h2>Session History</h2>
+                <p className="card-meta">Grouped by Date • {sessions.length} total sessions</p>
+              </div>
+              <span className="badge badge-closed">{sessionsByDate.length} Days</span>
             </div>
 
-            <div className="table-wrapper" style={{ flex: 1, overflowY: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Period</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions.map((s) => (
-                    <tr key={s.id}>
-                      <td className="font-mono">{s.session_date}</td>
-                      <td>Period {s.period}</td>
-                      <td>
-                        <span className={`badge ${s.status === 'active' ? 'badge-present' : 'badge-closed'}`}>
-                          {s.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {sessions.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="text-center text-dim">
-                        No session logs recorded yet
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="date-group-list" style={{ flex: 1, overflowY: 'auto', paddingRight: '2px' }}>
+              {sessionsByDate.map(([dateKey, daySessions]) => {
+                const isExpanded = expandedDates[dateKey] ?? true; // expanded by default
+                return (
+                  <div key={dateKey} className="date-group-card">
+                    <div
+                      className="date-group-header"
+                      onClick={() => toggleDate(dateKey)}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="date-group-title">
+                        <span>{dateKey}</span>
+                        <span className="text-dim text-xs">({daySessions.length} {daySessions.length === 1 ? 'class' : 'classes'})</span>
+                      </div>
+                      <span className="date-group-badge">
+                        {isExpanded ? 'Hide ▲' : 'Show ▼'}
+                      </span>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="date-group-content">
+                        {daySessions.map((s) => (
+                          <div key={s.id} className="date-session-item">
+                            <div className="date-session-meta">
+                              <div className="date-session-title">
+                                Period {s.period}
+                              </div>
+                              <div className="date-session-sub">
+                                Session ID: {s.id.slice(0, 8)}...
+                              </div>
+                            </div>
+                            <span className={`badge ${s.status === 'active' ? 'badge-present' : 'badge-closed'}`}>
+                              {s.status === 'active' ? 'LIVE' : 'COMPLETED'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {sessionsByDate.length === 0 && (
+                <p className="text-center text-dim py-8 text-sm">
+                  No session history recorded yet.
+                </p>
+              )}
             </div>
           </div>
         )}
       </main>
 
-      {/* Bottom Mobile Tab Bar */}
+      {/* STUDENT DETAILS MODAL */}
+      {selectedStudentForModal && (
+        <div className="modal-backdrop" onClick={() => setSelectedStudentForModal(null)}>
+          <div className="student-detail-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-bar">
+              <h3>Student Profile</h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setSelectedStudentForModal(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="student-modal-body">
+              <div className="student-modal-avatar-wrap">
+                {selectedStudentForModal.photo_url ? (
+                  <Image
+                    src={selectedStudentForModal.photo_url}
+                    alt={selectedStudentForModal.full_name}
+                    width={96}
+                    height={96}
+                    className="student-modal-avatar"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="student-modal-avatar-fallback">
+                    {selectedStudentForModal.full_name.charAt(0) || 'S'}
+                  </div>
+                )}
+              </div>
+
+              <h2 className="student-modal-name">{selectedStudentForModal.full_name}</h2>
+              <p className="student-modal-roll">{selectedStudentForModal.roll_number || 'Enrolled Student'}</p>
+
+              <div className="student-modal-info-grid">
+                <div className="info-cell">
+                  <span className="info-label">Email</span>
+                  <span className="info-val">{selectedStudentForModal.email || 'N/A'}</span>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Department</span>
+                  <span className="info-val">{selectedDepartment}</span>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Academic Year</span>
+                  <span className="info-val">Year {selectedYear}</span>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Status</span>
+                  <span className="info-val">
+                    <span className={`badge ${selectedStudentForModal.attendance_status === 'present' ? 'badge-present' : 'badge-absent'}`}>
+                      {selectedStudentForModal.attendance_status === 'present' ? 'Present' : 'Absent'}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {selectedStudentForModal.attendance_status !== 'present' && activeSession && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block mt-1"
+                  disabled={overrideLoading === selectedStudentForModal.student_id}
+                  onClick={() => {
+                    handleManualOverride(selectedStudentForModal.student_id);
+                    setSelectedStudentForModal((prev) =>
+                      prev ? { ...prev, attendance_status: 'present' } : null
+                    );
+                  }}
+                >
+                  {overrideLoading === selectedStudentForModal.student_id
+                    ? 'Recording...'
+                    : 'Mark Present (Manual Override)'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Mobile Tab Bar (Clean Text-Only Navigation) */}
       <nav className="mobile-bottom-nav">
         <button
           type="button"
           className={`mobile-nav-item ${activeTab === 'console' ? 'active' : ''}`}
           onClick={() => setActiveTab('console')}
         >
-          <span className="mobile-nav-icon">⚡</span>
           <span>Console</span>
         </button>
 
@@ -748,20 +877,19 @@ export default function TeacherDashboard() {
           className={`mobile-nav-item ${activeTab === 'rollcall' ? 'active' : ''}`}
           onClick={() => setActiveTab('rollcall')}
         >
-          <span className="mobile-nav-icon">📋</span>
           <span>Roll Call</span>
         </button>
 
         <button
           type="button"
-          className={`mobile-nav-item ${activeTab === 'logs' ? 'active' : ''}`}
-          onClick={() => setActiveTab('logs')}
+          className={`mobile-nav-item ${activeTab === 'history' ? 'active' : ''}`}
+          onClick={() => setActiveTab('history')}
         >
-          <span className="mobile-nav-icon">🕒</span>
-          <span>Logs</span>
+          <span>History</span>
         </button>
       </nav>
     </div>
   );
 }
+
 
