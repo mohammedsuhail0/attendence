@@ -51,7 +51,6 @@ export async function POST(
     const token = generateToken();
     const tokenExpiresAt = new Date(Date.now() + TOKEN_VALIDITY_SECONDS * 1000).toISOString();
 
-    const admin = createAdminClient();
     const { error } = await admin
       .from('attendance_sessions')
       .update({ token, token_expires_at: tokenExpiresAt })
