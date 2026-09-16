@@ -13,7 +13,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
+    const admin = createAdminClient();
+    const { data: profile } = await admin
       .from('profiles')
       .select('role, webauthn_credential')
       .eq('id', user.id)
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
     const { rpID } = getWebAuthnConfig(request);
     const options = await generateAuthenticationOptions({
       rpID,
+      timeout: 60000,
       allowCredentials: [
         {
           id: credential.id,
@@ -44,7 +46,6 @@ export async function POST(request: Request) {
       userVerification: 'required',
     });
 
-    const admin = createAdminClient();
     const { error: updateError } = await admin
       .from('profiles')
       .update({ webauthn_challenge: options.challenge })

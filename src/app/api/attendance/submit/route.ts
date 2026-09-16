@@ -34,19 +34,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Role check
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, webauthn_credential, webauthn_challenge')
-      .eq('id', user.id)
-
-      .single();
-
-    if (!profile || profile.role !== 'student') {
-      return NextResponse.json({ error: 'Only students can submit attendance' }, { status: 403 });
-    }
-
-    // Validate input
+    // Validate input first to fail fast on invalid payload
     const body = await request.json();
     const parsed = SubmitAttendanceSchema.safeParse(body);
     if (!parsed.success) {
@@ -59,14 +47,27 @@ export async function POST(request: Request) {
     const { token, assertion } = parsed.data;
     const admin = createAdminClient();
 
-    // Find active session with this token
-    const { data: session } = await admin
-      .from('attendance_sessions')
-      .select('*')
-      .eq('token', token)
-      .eq('status', 'active')
-      .single();
+    // Fetch student profile and active session in parallel using admin client (bypasses RLS)
+    const [profileRes, sessionRes] = await Promise.all([
+      admin
+        .from('profiles')
+        .select('role, webauthn_credential, webauthn_challenge')
+        .eq('id', user.id)
+        .single(),
+      admin
+        .from('attendance_sessions')
+        .select('*')
+        .eq('token', token)
+        .eq('status', 'active')
+        .single(),
+    ]);
 
+    const profile = profileRes.data;
+    if (!profile || profile.role !== 'student') {
+      return NextResponse.json({ error: 'Only students can submit attendance' }, { status: 403 });
+    }
+
+    const session = sessionRes.data;
     if (!session) {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 404 });
     }
@@ -80,38 +81,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Session has ended' }, { status: 410 });
     }
 
-    // Idempotency: if already marked, treat as success.
-    const { data: existing } = await admin
-      .from('attendance_records')
-      .select('id')
-      .eq('session_id', session.id)
-      .eq('student_id', user.id)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json({ message: 'Attendance already marked' }, { status: 200 });
-    }
-
     // Check token expiry with a small grace window for in-flight mobile submissions.
     if (isTokenExpired(session.token_expires_at, TOKEN_SUBMIT_GRACE_MS)) {
       return NextResponse.json({ error: 'Token has expired' }, { status: 410 });
     }
 
-    // Check if student is enrolled in this class
-    const { data: enrollment } = await admin
-      .from('enrollments')
-      .select('id')
-      .eq('student_id', user.id)
-      .eq('class_id', session.class_id)
-      .single();
+    // Check duplicate record and enrollment in parallel
+    const [existingRes, enrollmentRes] = await Promise.all([
+      admin
+        .from('attendance_records')
+        .select('id')
+        .eq('session_id', session.id)
+        .eq('student_id', user.id)
+        .maybeSingle(),
+      admin
+        .from('enrollments')
+        .select('id')
+        .eq('student_id', user.id)
+        .eq('class_id', session.class_id)
+        .single(),
+    ]);
 
-    if (!enrollment) {
+    if (existingRes.data) {
+      return NextResponse.json({ message: 'Attendance already marked' }, { status: 200 });
+    }
+
+    if (!enrollmentRes.data) {
       return NextResponse.json(
         { error: 'You are not enrolled in this class' },
         { status: 403 }
       );
     }
-
     // Biometric verification is mandatory before attendance marking
     const storedCredential = parseStoredWebAuthnCredential(profile.webauthn_credential);
     if (!storedCredential) {
@@ -154,16 +154,32 @@ export async function POST(request: Request) {
       );
     }
 
-    // Mark present first so attendance is never dropped due to profile update races/transient failures.
-    const { error } = await admin
-      .from('attendance_records')
-      .insert({
-        session_id: session.id,
-        student_id: user.id,
-        status: 'present',
-        mark_mode: 'biometric',
-      });
+    // Best-effort credential/challenge update prepared
+    const updatedCredential = {
+      ...storedCredential,
+      counter: biometricVerification.authenticationInfo.newCounter,
+    };
 
+    // Mark present and update profile counter concurrently to reduce response latency
+    const [insertResult] = await Promise.all([
+      admin
+        .from('attendance_records')
+        .insert({
+          session_id: session.id,
+          student_id: user.id,
+          status: 'present',
+          mark_mode: 'biometric',
+        }),
+      admin
+        .from('profiles')
+        .update({
+          webauthn_credential: updatedCredential,
+          webauthn_challenge: null,
+        })
+        .eq('id', user.id),
+    ]);
+
+    const error = insertResult.error;
     if (error) {
       const isDuplicateAttendance =
         error.code === '23505' ||
@@ -194,20 +210,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
     }
-
-    // Best-effort credential/challenge update after successful attendance write.
-    const updatedCredential = {
-      ...storedCredential,
-      counter: biometricVerification.authenticationInfo.newCounter,
-    };
-
-    await admin
-      .from('profiles')
-      .update({
-        webauthn_credential: updatedCredential,
-        webauthn_challenge: null,
-      })
-      .eq('id', user.id);
 
     return NextResponse.json({ message: 'Attendance marked successfully' }, { status: 201 });
   } catch {

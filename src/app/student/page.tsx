@@ -107,6 +107,7 @@ export default function StudentDashboard() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submitStage, setSubmitStage] = useState<'idle' | 'biometric' | 'verifying'>('idle');
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
   const [biometricReady, setBiometricReady] = useState<boolean | null>(null);
@@ -305,8 +306,8 @@ export default function StudentDashboard() {
     }
   }
 
-  async function fetchAuthenticationOptions(force = false): Promise<AuthRequestOptions> {
-    const maxOptionsAgeMs = 25_000;
+  const fetchAuthenticationOptions = useCallback(async (force = false): Promise<AuthRequestOptions> => {
+    const maxOptionsAgeMs = 48_000;
     const cachedOptions = authOptionsCacheRef.current;
     const now = Date.now();
     const isCacheFresh =
@@ -345,7 +346,39 @@ export default function StudentDashboard() {
     } finally {
       authOptionsInFlightRef.current = null;
     }
-  }
+  }, []);
+
+  const prefetchBiometricOptions = useCallback(async (force = false) => {
+    if (!hasBiometric) return;
+    try {
+      await fetchAuthenticationOptions(force);
+    } catch {
+      // Background prefetch fails silently; fallback will fetch synchronously on user submit
+    }
+  }, [hasBiometric, fetchAuthenticationOptions]);
+
+  // Pre-fetch biometric options as soon as student enters check-in tab
+  useEffect(() => {
+    if (hasBiometric && activeTab === 'checkin') {
+      void prefetchBiometricOptions();
+    }
+  }, [hasBiometric, activeTab, prefetchBiometricOptions]);
+
+  // Pre-fetch immediately when typing the 4-digit token or on QR code load
+  useEffect(() => {
+    if (hasBiometric && (token.length >= 1 || qrTokenScanned)) {
+      void prefetchBiometricOptions();
+    }
+  }, [hasBiometric, token.length, qrTokenScanned, prefetchBiometricOptions]);
+
+  // Keep challenge options hot & fresh in background while student is on checkin tab
+  useEffect(() => {
+    if (!hasBiometric || activeTab !== 'checkin') return;
+    const interval = window.setInterval(() => {
+      void prefetchBiometricOptions(true);
+    }, 40_000);
+    return () => window.clearInterval(interval);
+  }, [hasBiometric, activeTab, prefetchBiometricOptions]);
 
   async function createBiometricAssertion(): Promise<unknown> {
     if (!browserSupportsWebAuthn()) {
@@ -353,7 +386,7 @@ export default function StudentDashboard() {
     }
     requireBiometricSupport();
 
-    const maxOptionsAgeMs = 25_000;
+    const maxOptionsAgeMs = 48_000;
     const cachedOptions = authOptionsCacheRef.current;
     const now = Date.now();
     const isCacheFresh =
@@ -433,6 +466,7 @@ export default function StudentDashboard() {
     setError('');
     setSuccess('');
     setLoading(true);
+    setSubmitStage('biometric');
 
     try {
       if (!hasBiometric) {
@@ -440,6 +474,8 @@ export default function StudentDashboard() {
       }
 
       const assertion = await createBiometricAssertion();
+      setSubmitStage('verifying');
+
       const tokenValue = token.toUpperCase().trim();
       const { res, data } = await submitAttendanceWithRetry({
         token: tokenValue,
@@ -460,9 +496,11 @@ export default function StudentDashboard() {
       authOptionsCacheRef.current = null;
       void Promise.allSettled([loadHistory(), loadLeaderboard()]);
     } catch (e: unknown) {
+      authOptionsCacheRef.current = null;
       setError(toErrorMessage(e, 'Failed to submit attendance.'));
     } finally {
       setLoading(false);
+      setSubmitStage('idle');
     }
   }
 
@@ -679,7 +717,11 @@ export default function StudentDashboard() {
                     className="btn btn-primary btn-block"
                     disabled={loading || token.length !== 4 || !hasBiometric || biometricReady !== true}
                   >
-                    {loading ? 'Authenticating...' : 'Verify & Submit Attendance'}
+                    {loading
+                      ? submitStage === 'biometric'
+                        ? '👆 Touch Fingerprint / Face ID...'
+                        : '⚡ Verifying & Submitting...'
+                      : 'Verify & Submit Attendance'}
                   </button>
                 </form>
               </div>
