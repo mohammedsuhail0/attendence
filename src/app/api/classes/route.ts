@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { CANONICAL_CURRICULUM } from '@/lib/curriculum';
+import type { Class } from '@/types/database';
 
 export async function GET() {
   try {
@@ -27,15 +29,30 @@ export async function GET() {
         .order('subject', { ascending: true }),
     ]);
 
-    if (classesRes.error) {
-      return NextResponse.json({ error: classesRes.error.message }, { status: 500 });
+    let classes: Class[] = [];
+
+    if (!classesRes.error && Array.isArray(classesRes.data) && classesRes.data.length > 0) {
+      // Merge DB classes with canonical curriculum to ensure no department or year is missing
+      const dbClasses = classesRes.data as Class[];
+      const seen = new Set(dbClasses.map((c) => `${c.department}-${c.section}-${c.subject.toLowerCase()}`));
+      const missingCanonical = CANONICAL_CURRICULUM.filter(
+        (c) => !seen.has(`${c.department}-${c.section}-${c.subject.toLowerCase()}`)
+      );
+      classes = [...dbClasses, ...missingCanonical];
+    } else {
+      // Fallback directly to canonical curriculum if DB is empty or unreachable
+      classes = [...CANONICAL_CURRICULUM];
     }
 
     return NextResponse.json({
-      classes: classesRes.data || [],
+      classes,
       profile: profileRes.data || null,
     });
   } catch {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    // Resilient fallback even on unhandled network exception
+    return NextResponse.json({
+      classes: CANONICAL_CURRICULUM,
+      profile: null,
+    });
   }
 }

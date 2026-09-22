@@ -7,7 +7,7 @@ import {
   getDateStringInTimeZone,
   TOKEN_VALIDITY_SECONDS,
 } from '@/lib/utils';
-
+import { findCurriculumClass } from '@/lib/curriculum';
 import {
   closeSessionAndMarkAbsent,
   isSessionExpiredByAge,
@@ -52,15 +52,53 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if class exists in curriculum
+    let classRecordId = class_id;
+
+    // Check if class exists in database
     const { data: cls } = await admin
       .from('classes')
-      .select('id')
+      .select('id, department, section, subject')
       .eq('id', class_id)
-      .single();
+      .maybeSingle();
 
     if (!cls) {
-      return NextResponse.json({ error: 'Class not found' }, { status: 404 });
+      // Check if it's one of our canonical curriculum classes
+      const canonical = findCurriculumClass(class_id);
+      if (canonical) {
+        // Upsert into classes table in Supabase so foreign key constraint passes
+        const { data: upsertedClass, error: upsertErr } = await admin
+          .from('classes')
+          .upsert(
+            {
+              id: canonical.id,
+              department: canonical.department,
+              section: canonical.section,
+              subject: canonical.subject,
+              teacher_id: user.id,
+            },
+            { onConflict: 'id' }
+          )
+          .select('id')
+          .maybeSingle();
+
+        if (upsertErr) {
+          // If upsert conflicted on department/section/subject constraint, find existing
+          const { data: existingClassByDetails } = await admin
+            .from('classes')
+            .select('id')
+            .eq('department', canonical.department)
+            .eq('section', canonical.section)
+            .eq('subject', canonical.subject)
+            .maybeSingle();
+          if (existingClassByDetails) {
+            classRecordId = existingClassByDetails.id;
+          }
+        } else if (upsertedClass) {
+          classRecordId = upsertedClass.id;
+        }
+      } else {
+        return NextResponse.json({ error: 'Class not found' }, { status: 404 });
+      }
     }
 
     const normalizedRole = profile?.role?.trim().toLowerCase();
@@ -71,17 +109,40 @@ export async function POST(request: Request) {
     // Check for duplicate session (same class, period, date)
     const { data: existing } = await admin
       .from('attendance_sessions')
-      .select('id')
-      .eq('class_id', class_id)
+      .select('*')
+      .eq('class_id', classRecordId)
       .eq('period', period)
       .eq('session_date', session_date)
-      .single();
+      .maybeSingle();
 
     if (existing) {
-      return NextResponse.json(
-        { error: 'Session already exists for this class/period/date' },
-        { status: 409 }
-      );
+      // If it exists and is active, return it directly so teacher doesn't get blocked with 409!
+      if (existing.status === 'active') {
+        return NextResponse.json({
+          session: existing,
+          message: 'Active session already exists for this class and period',
+        }, { status: 200 });
+      }
+
+      // If it exists but was closed, re-activate it with a fresh token!
+      const token = generateToken();
+      const now = new Date();
+      const tokenExpiresAt = new Date(now.getTime() + TOKEN_VALIDITY_SECONDS * 1000).toISOString();
+      const { data: reactivated, error: reactivateErr } = await admin
+        .from('attendance_sessions')
+        .update({
+          status: 'active',
+          token,
+          token_expires_at: tokenExpiresAt,
+          updated_at: now.toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (!reactivateErr && reactivated) {
+        return NextResponse.json({ session: reactivated, message: 'Session re-opened' }, { status: 200 });
+      }
     }
 
     // Generate token and expiry
@@ -93,7 +154,7 @@ export async function POST(request: Request) {
     const { data: session, error } = await admin
       .from('attendance_sessions')
       .insert({
-        class_id,
+        class_id: classRecordId,
         teacher_id: user.id,
         token,
         period,
@@ -109,8 +170,9 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ session }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import Image from 'next/image';
 import type { Class, AttendanceSession } from '@/types/database';
 import { getDateStringInTimeZone } from '@/lib/utils';
+import { CANONICAL_CURRICULUM } from '@/lib/curriculum';
 
 const DEPARTMENT_OPTIONS = ['IT', 'CSE', 'AIDS', 'Civil', 'Mech'] as const;
 const YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
@@ -35,14 +36,14 @@ export default function TeacherDashboard() {
   const supabase = createClient();
   const router = useRouter();
 
-  const [classes, setClasses] = useState<Class[]>([]);
+  const [classes, setClasses] = useState<Class[]>(CANONICAL_CURRICULUM);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [profile, setProfile] = useState<{ full_name: string } | null>(null);
   const [today, setToday] = useState(() => getDateStringInTimeZone());
 
   const [selectedDepartment, setSelectedDepartment] = useState('IT');
   const [selectedYear, setSelectedYear] = useState('1');
-  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('Programming Fundamentals');
   const [period, setPeriod] = useState(1);
 
   const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
@@ -114,10 +115,21 @@ export default function TeacherDashboard() {
   // Initial load
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
+      let user = null;
+      try {
+        const userRes = await supabase.auth.getUser();
+        user = userRes?.data?.user;
+      } catch {
+        // Fallback to session check if getUser had a transient error
+      }
+
       if (!user) {
-        router.push('/login');
-        return;
+        try {
+          const sessRes = await supabase.auth.getSession();
+          user = sessRes?.data?.session?.user;
+        } catch {
+          // Ignore
+        }
       }
 
       // Fetch classes and sessions in parallel from Next.js server APIs
@@ -126,6 +138,12 @@ export default function TeacherDashboard() {
         fetch('/api/sessions').catch(() => null),
       ]);
 
+      // If neither client-auth nor server session cookie is valid, redirect to login
+      if (!user && (!res1 || res1.status === 401)) {
+        router.push('/login');
+        return;
+      }
+
       if (res1 && res1.ok) {
         const d1 = await res1.json().catch(() => ({}));
         if (d1.profile) {
@@ -133,15 +151,6 @@ export default function TeacherDashboard() {
         }
         if (Array.isArray(d1.classes) && d1.classes.length > 0) {
           setClasses(d1.classes);
-          const defaultClass =
-            d1.classes.find(
-              (c: Class) => c.department === 'IT' && getClassYear(c) === '1'
-            ) || d1.classes[0];
-          if (defaultClass) {
-            setSelectedDepartment(defaultClass.department);
-            setSelectedYear(getClassYear(defaultClass));
-            setSelectedSubject(defaultClass.subject);
-          }
         }
       }
 

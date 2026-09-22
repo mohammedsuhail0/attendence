@@ -16,7 +16,8 @@ function getDashboardByRole(role: string | undefined) {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isApiPath = pathname.startsWith('/api');
-  const isPublicApiPath = pathname === '/api/auth/resolve-login';
+  const isPublicApiPath =
+    pathname === '/api/auth/resolve-login' || pathname === '/api/auth/login';
   const isPublicPath =
     pathname === '/' || pathname.startsWith('/login') || isPublicApiPath;
 

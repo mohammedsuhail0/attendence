@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
@@ -29,70 +28,88 @@ export default function LoginPage() {
     }
 
     const supabase = createClient();
-    const normalizedIdentifier = rawIdentifier.includes('@')
-      ? rawIdentifier.toLowerCase()
-      : rawIdentifier.replace(/\s+/g, '');
 
-    let loginEmail = normalizedIdentifier;
-    if (!normalizedIdentifier.includes('@')) {
-      const resolveRes = await fetch('/api/auth/resolve-login', {
+    try {
+      // Primary: authenticate through server-side /api/auth/login
+      // This bypasses client-side ISP DNS sinkholes/ECONNRESET and sets cookies via @supabase/ssr
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: normalizedIdentifier }),
+        body: JSON.stringify({ identifier: rawIdentifier, password }),
       });
 
-      const resolveData = await resolveRes.json().catch(() => ({}));
-      if (!resolveRes.ok || !resolveData.email) {
-        setError(resolveData.error || 'Unable to resolve roll number. Please check your roll number or use your email.');
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        // Synchronize session to browser client so client calls immediately have user context
+        if (data.session) {
+          try {
+            await supabase.auth.setSession(data.session);
+          } catch (syncErr) {
+            console.warn('Session client sync notice:', syncErr);
+          }
+        }
+        window.location.assign(data.destination || '/teacher');
+        return;
+      }
+
+      // If server returned an explicit error (e.g. invalid credentials)
+      if (data.error) {
+        setError(data.error);
         setLoading(false);
         return;
       }
 
-      loginEmail = String(resolveData.email).toLowerCase();
-    }
+      // Fallback: client-side signInWithPassword
+      let loginEmail = rawIdentifier;
+      if (!rawIdentifier.includes('@')) {
+        const resolveRes = await fetch('/api/auth/resolve-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: rawIdentifier.replace(/\s+/g, '') }),
+        });
+        const resolveData = await resolveRes.json().catch(() => ({}));
+        if (resolveData.email) {
+          loginEmail = resolveData.email;
+        }
+      }
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: loginEmail,
-      password,
-    });
+      const { error: clientAuthError } = await supabase.auth.signInWithPassword({
+        email: loginEmail.toLowerCase(),
+        password,
+      });
 
-    if (authError) {
-      setError('Invalid credentials. Please check your email/roll number and password.');
+      if (clientAuthError) {
+        setError(clientAuthError.message || 'Invalid credentials. Please check your email/roll number and password.');
+        setLoading(false);
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('Login failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      const destination =
+        profile?.role === 'teacher'
+          ? '/teacher'
+          : profile?.role === 'admin'
+            ? '/admin'
+            : '/student';
+
+      window.location.assign(destination);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error during sign in. Please try again.');
       setLoading(false);
-      return;
     }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setError('Login failed');
-      setLoading(false);
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError) {
-      setError(profileError.message);
-      setLoading(false);
-      return;
-    }
-
-    const destination =
-      profile?.role === 'teacher'
-        ? '/teacher'
-        : profile?.role === 'admin'
-          ? '/admin'
-          : '/student';
-
-    // A full navigation is more reliable immediately after auth changes.
-    window.location.assign(destination);
   }
 
   return (
@@ -102,14 +119,6 @@ export default function LoginPage() {
         <div className="signin-glow signin-glow-bottom" aria-hidden="true" />
 
         <header className="signin-brand-row">
-          <Image
-            src="/images/nova-class-logo.png"
-            alt="Nova Class logo"
-            className="signin-logo-image"
-            width={52}
-            height={52}
-            priority
-          />
           <h1>Nova Class</h1>
         </header>
 
