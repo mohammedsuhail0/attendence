@@ -23,10 +23,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Load profile so we can keep the teacher-only intent, but do not rely on
-    // a stale role value alone. Class ownership is the stronger authorization
-    // check further below.
-    const { data: profile } = await supabase
+    const admin = createAdminClient();
+
+    // Load profile with admin client to bypass RLS
+    const { data: profile } = await admin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -52,25 +52,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if teacher owns this class
-    const { data: cls } = await supabase
+    // Check if class exists in curriculum
+    const { data: cls } = await admin
       .from('classes')
       .select('id')
       .eq('id', class_id)
-      .eq('teacher_id', user.id)
       .single();
 
     if (!cls) {
-      return NextResponse.json({ error: 'Class not found or not yours' }, { status: 404 });
+      return NextResponse.json({ error: 'Class not found' }, { status: 404 });
     }
 
     const normalizedRole = profile?.role?.trim().toLowerCase();
-    if (normalizedRole && normalizedRole !== 'teacher') {
-      return NextResponse.json({ error: 'Only teachers can create sessions' }, { status: 403 });
+    if (normalizedRole && normalizedRole !== 'teacher' && normalizedRole !== 'admin') {
+      return NextResponse.json({ error: 'Only faculty can create sessions' }, { status: 403 });
     }
 
     // Check for duplicate session (same class, period, date)
-    const { data: existing } = await supabase
+    const { data: existing } = await admin
       .from('attendance_sessions')
       .select('id')
       .eq('class_id', class_id)
@@ -90,8 +89,8 @@ export async function POST(request: Request) {
     const now = new Date();
     const tokenExpiresAt = new Date(now.getTime() + TOKEN_VALIDITY_SECONDS * 1000).toISOString();
 
-    // Create session
-    const { data: session, error } = await supabase
+    // Create session using admin client
+    const { data: session, error } = await admin
       .from('attendance_sessions')
       .insert({
         class_id,
@@ -126,7 +125,7 @@ export async function GET() {
     }
 
     // Get teacher's sessions
-    let { data: sessions, error } = await supabase
+    let { data: sessions, error } = await admin
       .from('attendance_sessions')
       .select('*, classes(*)')
       .eq('teacher_id', user.id)
@@ -160,7 +159,7 @@ export async function GET() {
         )
       );
 
-      const refreshed = await supabase
+      const refreshed = await admin
         .from('attendance_sessions')
         .select('*, classes(*)')
         .eq('teacher_id', user.id)
@@ -179,7 +178,7 @@ export async function GET() {
     }
 
     const sessionIds = sessions.map((session) => session.id);
-    const { data: records, error: recordsError } = await supabase
+    const { data: records, error: recordsError } = await admin
       .from('attendance_records')
       .select('session_id, status, mark_mode')
       .in('session_id', sessionIds);

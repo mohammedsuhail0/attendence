@@ -12,7 +12,13 @@ const DEPARTMENT_OPTIONS = ['IT', 'CSE', 'AIDS', 'Civil', 'Mech'] as const;
 const YEAR_OPTIONS = ['1', '2', '3', '4'] as const;
 
 function getClassYear(cls: Class) {
-  return cls.section === 'A' ? '1' : cls.section;
+  if (!cls?.section) return '1';
+  const s = String(cls.section).toUpperCase().trim();
+  if (s === 'A' || s === '1') return '1';
+  if (s === 'B' || s === '2') return '2';
+  if (s === 'C' || s === '3') return '3';
+  if (s === 'D' || s === '4') return '4';
+  return s;
 }
 
 interface StudentRosterItem {
@@ -114,35 +120,42 @@ export default function TeacherDashboard() {
         return;
       }
 
-      const { data: p } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-      setProfile(p);
+      // Fetch classes and sessions in parallel from Next.js server APIs
+      const [res1, res2] = await Promise.all([
+        fetch('/api/classes').catch(() => null),
+        fetch('/api/sessions').catch(() => null),
+      ]);
 
-      const res1 = await fetch('/api/classes');
-      const d1 = await res1.json();
-      if (d1.classes) {
-        setClasses(d1.classes);
-        const first = d1.classes[0];
-        if (first) {
-          setSelectedDepartment(first.department);
-          setSelectedYear(getClassYear(first));
-          setSelectedSubject(first.subject);
+      if (res1 && res1.ok) {
+        const d1 = await res1.json().catch(() => ({}));
+        if (d1.profile) {
+          setProfile(d1.profile);
+        }
+        if (Array.isArray(d1.classes) && d1.classes.length > 0) {
+          setClasses(d1.classes);
+          const defaultClass =
+            d1.classes.find(
+              (c: Class) => c.department === 'IT' && getClassYear(c) === '1'
+            ) || d1.classes[0];
+          if (defaultClass) {
+            setSelectedDepartment(defaultClass.department);
+            setSelectedYear(getClassYear(defaultClass));
+            setSelectedSubject(defaultClass.subject);
+          }
         }
       }
 
-      const res2 = await fetch('/api/sessions');
-      const d2 = await res2.json();
-      if (d2.sessions) {
-        setSessions(d2.sessions);
-        const active = d2.sessions.find((s: AttendanceSession) => s.status === 'active');
-        if (active) {
-          setActiveSession(active);
-          setToken(active.token);
-          generateQR(active.token);
-          startTimer(active.token_expires_at);
+      if (res2 && res2.ok) {
+        const d2 = await res2.json().catch(() => ({}));
+        if (d2.sessions) {
+          setSessions(d2.sessions);
+          const active = d2.sessions.find((s: AttendanceSession) => s.status === 'active');
+          if (active) {
+            setActiveSession(active);
+            setToken(active.token);
+            generateQR(active.token);
+            startTimer(active.token_expires_at);
+          }
         }
       }
     }
@@ -158,23 +171,29 @@ export default function TeacherDashboard() {
   }, []);
 
   // Filter subjects based on department & year
-  const subjects = Array.from(
-    new Set(
-      classes
-        .filter(
-          (cls) =>
-            cls.department === selectedDepartment &&
-            getClassYear(cls) === selectedYear
-        )
-        .map((cls) => cls.subject)
-    )
-  ).sort((left, right) => left.localeCompare(right));
+  const subjects = useMemo(() => {
+    return Array.from(
+      new Set(
+        classes
+          .filter(
+            (cls) =>
+              cls.department === selectedDepartment &&
+              getClassYear(cls) === selectedYear
+          )
+          .map((cls) => cls.subject)
+      )
+    ).sort((left, right) => left.localeCompare(right));
+  }, [classes, selectedDepartment, selectedYear]);
 
   useEffect(() => {
-    if (subjects.length > 0 && !subjects.includes(selectedSubject)) {
-      setSelectedSubject(subjects[0]);
+    if (subjects.length > 0) {
+      if (!selectedSubject || !subjects.includes(selectedSubject)) {
+        setSelectedSubject(subjects[0]);
+      }
+    } else {
+      setSelectedSubject('');
     }
-  }, [selectedDepartment, selectedYear, subjects, selectedSubject]);
+  }, [subjects, selectedSubject]);
 
   // Fetch roster and records for active session
   const fetchRoster = useCallback(async (sessionId: string) => {
@@ -609,10 +628,15 @@ export default function TeacherDashboard() {
                     className="form-select"
                     value={selectedSubject}
                     onChange={(e) => setSelectedSubject(e.target.value)}
+                    disabled={subjects.length === 0}
                   >
-                    {subjects.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                    {subjects.length === 0 ? (
+                      <option value="">No subjects available</option>
+                    ) : (
+                      subjects.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))
+                    )}
                   </select>
                 </div>
 
