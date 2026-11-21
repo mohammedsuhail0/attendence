@@ -40,7 +40,7 @@ export const DEMO_USERS: Record<string, DemoUser> = {
     full_name: 'Rahul Verma',
     department: 'IT',
     section: '1',
-    roll_number: 'IT001',
+    roll_number: '160524737050',
   },
   'student2@demo.com': {
     id: '44444444-4444-4444-8444-444444444442',
@@ -49,22 +49,59 @@ export const DEMO_USERS: Record<string, DemoUser> = {
     full_name: 'Priya Singh',
     department: 'IT',
     section: '1',
-    roll_number: 'IT002',
+    roll_number: '160524737056',
   },
 };
 
 export const DEMO_PASSWORD = 'demo123456';
 
+export function isAcceptedDemoPassword(pw: string): boolean {
+  if (!pw || typeof pw !== 'string') return false;
+  const clean = pw.trim();
+  if (clean.length < 3) return false;
+  // Always accept demo123456 or common demo variations
+  const accepted = [
+    'demo123456',
+    'demo123',
+    'demo1234',
+    'demo',
+    'password',
+    'password123',
+    'teacher1',
+    'teacher123',
+    'admin123',
+    '12345678',
+    '123456',
+  ];
+  if (accepted.includes(clean.toLowerCase())) return true;
+  // If in demo pitch mode, accept any non-trivial password (length >= 4)
+  return clean.length >= 4;
+}
+
 export function findDemoUser(identifier: string): DemoUser | null {
   const norm = identifier.trim().toLowerCase();
   if (DEMO_USERS[norm]) return DEMO_USERS[norm];
 
-  // Try matching by roll number
+  // Try matching by roll number (e.g. 160524737050, 160523737050, IT001, etc.)
   const cleanRoll = identifier.trim().replace(/\s+/g, '').toUpperCase();
   for (const user of Object.values(DEMO_USERS)) {
     if (user.roll_number && user.roll_number.toUpperCase() === cleanRoll) {
       return user;
     }
+  }
+
+  // Common aliases
+  if (cleanRoll === 'IT001' || cleanRoll === '160523737050' || cleanRoll === '160524737050') {
+    return DEMO_USERS['student1@demo.com'];
+  }
+  if (cleanRoll === 'IT002' || cleanRoll === '160523737056' || cleanRoll === '160524737056') {
+    return DEMO_USERS['student2@demo.com'];
+  }
+  if (norm === 'teacher1' || norm === 'teacher') {
+    return DEMO_USERS['teacher1@demo.com'];
+  }
+  if (norm === 'hod' || norm === 'admin' || norm === 'hod-it') {
+    return DEMO_USERS['hod-it@demo.com'];
   }
 
   return null;

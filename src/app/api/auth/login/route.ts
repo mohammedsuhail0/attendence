@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { rateLimit } from '@/lib/utils';
-import { findDemoUser, DEMO_PASSWORD } from '@/lib/demo-fallback';
+import { findDemoUser, isAcceptedDemoPassword } from '@/lib/demo-fallback';
 
 const LoginSchema = z.object({
   identifier: z.string().trim().min(1, 'Please enter your email or roll number'),
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
 
     // Emergency Offline Demo Fallback: If Supabase is down/paused or credentials match demo
     const demoUser = findDemoUser(identifier);
-    if (demoUser && password === DEMO_PASSWORD) {
+    if (demoUser && isAcceptedDemoPassword(password)) {
       const cookieStore = await cookies();
       const sessionPayload = {
         id: demoUser.id,
